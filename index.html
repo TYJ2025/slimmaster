@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#0d9f6e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="享瘦高手" />
+    <title>享瘦高手 — 隨身營養師 + 健身教練</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="key-banner" hidden>🔑 尚未設定 API key,AI 功能無法使用 — 點此前往設定</div>
+    <div id="app"></div>
+    <nav id="tabbar" hidden>
+      <button data-tab="today"><span class="ico">🏠</span>今日</button>
+      <button data-tab="log"><span class="ico">📷</span>記錄</button>
+      <button data-tab="plan"><span class="ico">📅</span>計畫</button>
+      <button data-tab="coach"><span class="ico">💬</span>教練</button>
+      <button data-tab="me"><span class="ico">👤</span>我的</button>
+    </nav>
+    <div id="modal-root"></div>
+    <div id="toast"></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

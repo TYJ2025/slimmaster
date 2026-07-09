@@ -1,0 +1,16 @@
+{
+  "name": "享瘦高手",
+  "short_name": "享瘦高手",
+  "description": "你的隨身營養師 + 健身教練",
+  "lang": "zh-TW",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f2f5f7",
+  "theme_color": "#0d9f6e",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

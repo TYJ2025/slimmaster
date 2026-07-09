@@ -1,0 +1,281 @@
+// AI 層:享瘦高手的人設、各任務 prompt、與 Anthropic API 的直連呼叫。
+// 瀏覽器直接呼叫 API(CORS 由 anthropic-dangerous-direct-browser-access 允許),
+// API key 只存在本機 localStorage,不經過任何中介伺服器。
+
+import { ACTIVITY_LEVELS, GOALS, RATES } from './nutrition.js';
+import { DB } from './store.js';
+
+const WEEKDAYS = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+export function weekdayOf(dateStr) {
+  return WEEKDAYS[new Date(dateStr + 'T12:00:00').getDay()];
+}
+
+// ---- Anthropic API 直連 ----
+export function extractJson(text) {
+  if (!text) throw new Error('空回應,無法解析');
+  let t = text.trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) t = fence[1].trim();
+  const start = t.indexOf('{');
+  const end = t.lastIndexOf('}');
+  if (start !== -1 && end !== -1 && end > start) t = t.slice(start, end + 1);
+  return JSON.parse(t);
+}
+
+export function hasKey() {
+  return !!(DB.settings.apiKey || '').trim();
+}
+
+async function ask({ system, prompt, imageB64 = null, json = false, maxTokens = 8192, model = null, timeoutMs = 120000 }) {
+  const key = (DB.settings.apiKey || '').trim();
+  if (!key) throw new Error('尚未設定 API key。請到「我的」→ AI 設定,貼上你的 Anthropic API key。');
+
+  const content = [];
+  if (imageB64) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageB64 } });
+  content.push({ type: 'text', text: prompt });
+
+  // 逾時保護:超時一律中止並回報,絕不讓請求「卡住」害按鈕失效
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  const timeoutError = new Error('等太久沒有回應,已中止。請再按一次;產生過程請保持 App 畫面開著、不要鎖屏。');
+
+  try {
+    let res;
+    try {
+      res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        signal: ctrl.signal,
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: model || DB.settings.model || 'claude-sonnet-5',
+          max_tokens: maxTokens,
+          system: system || undefined,
+          messages: [{ role: 'user', content }],
+          stream: true, // 串流:在手機網路上比一次等完整回應穩定
+        }),
+      });
+    } catch (e) {
+      if (e.name === 'AbortError') throw timeoutError;
+      throw new Error('連不上 Anthropic API,請確認手機有網路後再試。');
+    }
+
+    if (!res.ok) {
+      let type = '', msg = '';
+      try { const e = await res.json(); type = e?.error?.type || ''; msg = e?.error?.message || ''; } catch { /* 用預設訊息 */ }
+      if (res.status === 401 || type === 'authentication_error') throw new Error('API key 無效或已停用,請到「我的」→ AI 設定檢查。');
+      if (res.status === 429) throw new Error('請求太頻繁或額度用盡,請稍等再試。');
+      if (res.status === 529 || type === 'overloaded_error') throw new Error('Anthropic 伺服器忙碌中,請稍等再試。');
+      throw new Error(`API 錯誤 ${res.status}:${msg || type || '未知錯誤'}`);
+    }
+
+    // 讀取 SSE 串流,把文字增量拼起來
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '', text = '';
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const raw of lines) {
+          const line = raw.trim();
+          if (!line.startsWith('data:')) continue;
+          const payload = line.slice(5).trim();
+          if (!payload) continue;
+          let ev;
+          try { ev = JSON.parse(payload); } catch { continue; }
+          if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') text += ev.delta.text;
+          else if (ev.type === 'error') throw new Error(ev.error?.message || 'API 串流中斷,請再試一次。');
+        }
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') throw timeoutError;
+      throw e;
+    }
+    return json ? extractJson(text) : text;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ---- 共用人設 ----
+export function personaPrompt() {
+  const p = DB.profile || {};
+  const t = DB.targets || {};
+  const lines = [
+    '你是「享瘦高手」,一位同時具備營養師與健身教練專業的私人教練。',
+    '個性:專業、直接、溫暖但不囉唆。永遠用繁體中文(台灣用語)回答。',
+    '飲食建議以台灣常見食材、超商與外食選項為主;運動建議兼顧居家與健身房情境。',
+    '',
+    '【學員資料】',
+    `- 性別:${p.gender === 'male' ? '男' : '女'},年齡:${p.age} 歲,身高:${p.heightCm} cm,體重:${p.weightKg} kg`,
+    `- 目標:${(GOALS[p.goal] || {}).label || p.goal}${p.targetWeightKg ? `(目標體重 ${p.targetWeightKg} kg)` : ''},速度:${(RATES[p.rate] || {}).label || ''}`,
+    `- 活動量:${(ACTIVITY_LEVELS[p.activity] || {}).label || ''}`,
+    `- 每日熱量目標:${t.calorieTarget} kcal(BMR ${t.bmr} / TDEE ${t.tdee})`,
+    `- 巨量營養素目標:蛋白質 ${t.macros?.proteinG} g / 碳水 ${t.macros?.carbG} g / 脂肪 ${t.macros?.fatG} g`,
+  ];
+  if (p.restrictions) lines.push(`- 飲食限制/過敏:${p.restrictions}`);
+  if (p.preferences) lines.push(`- 口味偏好:${p.preferences}`);
+  if (p.equipment) lines.push(`- 可用運動器材:${p.equipment}`);
+  if (p.scheduleNote) lines.push(`- 作息備註:${p.scheduleNote}`);
+  lines.push('', '原則:增肌減脂的核心是「熱量控制 + 足量蛋白質 + 規律阻力訓練」。建議要具體可執行,不說空話。');
+  return lines.join('\n');
+}
+
+// ---- 一週菜單 ----
+export function aiWeekMeals({ dates, note, recentMeals }) {
+  const dayList = dates.map((d) => `${d}(${weekdayOf(d)})`).join('、');
+  const prompt = [
+    `請為學員規劃一週三餐菜單,日期為:${dayList}。`,
+    '',
+    '規劃原則:',
+    '1. 每天三餐加總貼近每日熱量目標(±5%),蛋白質達標。',
+    '2. 食譜要「忙碌上班族做得出來」:步驟不超過 4 步,或直接給超商/外食的具體組合。',
+    '3. 一週內菜色不重複,兼顧口味變化;遵守飲食限制與偏好。',
+    '4. 每餐附一個小提示(tip):外食替代方案或備餐訣竅。',
+    note ? `5. 本週特別需求:${note}` : '',
+    recentMeals ? `\n最近實際吃過的餐點(避免重複、貼近口味):\n${recentMeals}` : '',
+    '',
+    '只回傳 JSON,不要任何其他文字,格式如下:',
+    `{
+  "summary": "本週菜單重點,一句話",
+  "days": [
+    {
+      "date": "YYYY-MM-DD",
+      "meals": {
+        "breakfast": { "name": "餐點名", "kcal": 400, "protein": 25, "carb": 40, "fat": 12, "ingredients": ["食材與份量"], "steps": ["步驟"], "tip": "外食替代或訣竅" },
+        "lunch":     { "格式同 breakfast": "" },
+        "dinner":    { "格式同 breakfast": "" }
+      }
+    }
+  ]
+}`,
+    'days 必須包含上述全部 7 天,ingredients 最多 6 項、steps 最多 4 步。',
+  ].filter(Boolean).join('\n');
+  return ask({ system: personaPrompt(), prompt, json: true, timeoutMs: 300000 });
+}
+
+// ---- 一週運動計畫 ----
+export function aiWeekWorkout({ dates, note }) {
+  const dayList = dates.map((d) => `${d}(${weekdayOf(d)})`).join('、');
+  const prompt = [
+    `請為學員規劃一週運動計畫,日期為:${dayList}。`,
+    '',
+    '規劃原則:',
+    '1. 一週應包含 2-4 天重訓(依學員程度與器材)、1-3 天有氧、至少 1 天完全休息。',
+    '2. 每個動作都要有 howTo:一般人看得懂的動作要領(2-3 句,含常見錯誤提醒)。',
+    '3. 每天給 timing:當天建議的運動時段,以及與用餐的搭配(如運動前 1 小時吃什麼、運動後 30 分鐘內補充什麼)。',
+    '4. 重訓動作 4-6 個,標明組數次數;有氧標明強度與時間。',
+    note ? `5. 本週特別需求:${note}` : '',
+    '',
+    '只回傳 JSON,不要任何其他文字,格式如下:',
+    `{
+  "summary": "本週訓練重點,一句話",
+  "scheduleNote": "本週用餐與運動時間的整體建議(2-3 句)",
+  "days": [
+    {
+      "date": "YYYY-MM-DD",
+      "type": "strength | cardio | mixed | rest",
+      "focus": "訓練重點,如:下肢重訓 / 快走有氧 / 休息日",
+      "duration": "約 40 分鐘",
+      "timing": "建議 18:30 運動;運動前 1 小時吃半根香蕉,運動後 30 分鐘內補充蛋白質",
+      "items": [
+        { "name": "動作名", "detail": "3 組 x 12 下(組間休息 60-90 秒)", "howTo": "動作要領與常見錯誤", "muscles": "主要肌群" }
+      ]
+    }
+  ]
+}`,
+    'days 必須包含上述全部 7 天;休息日 items 給 1-2 個輕鬆伸展即可。',
+  ].filter(Boolean).join('\n');
+  return ask({ system: personaPrompt(), prompt, json: true, timeoutMs: 300000 });
+}
+
+// ---- 分析一餐(照片/文字)----
+export function aiAnalyzeMeal({ description, imageB64, mealType, eatenToday }) {
+  const mealLabel = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '點心' }[mealType] || '一餐';
+  const prompt = [
+    imageB64
+      ? `學員拍了${mealLabel}的照片請你分析。請仔細觀察照片中每一項食物與份量。`
+      : `學員用文字描述了${mealLabel},請你分析。`,
+    description ? `學員補充說明:「${description}」` : '',
+    eatenToday ? `今天目前已吃:${eatenToday}` : '',
+    '',
+    '請估算每項食物的熱量與三大營養素,並以營養師 + 健身教練的身分,針對學員的增肌減脂目標給出具體建議(advice):',
+    '這餐吃得如何?接下來這一天該怎麼調整?2-3 句,直接又實用。',
+    '',
+    '只回傳 JSON,不要任何其他文字,格式如下:',
+    `{
+  "name": "這餐的簡短名稱",
+  "items": [ { "food": "食物", "portion": "份量", "calories": 300, "protein": 20, "carb": 30, "fat": 10 } ],
+  "totalCalories": 650,
+  "protein": 35, "carb": 60, "fat": 22,
+  "advice": "給學員的具體建議"
+}`,
+  ].filter(Boolean).join('\n');
+  return ask({ system: personaPrompt(), prompt, imageB64, json: true, maxTokens: 2048, timeoutMs: 120000 });
+}
+
+// ---- 教練對話 ----
+export function aiChat({ date, context, history, message }) {
+  const prompt = [
+    `【今天是 ${date}(${weekdayOf(date)})】`,
+    context,
+    '',
+    '【最近對話】',
+    history || '(這是第一則訊息)',
+    '',
+    `【學員最新訊息】${message}`,
+    '',
+    '請以「享瘦高手」的身分回覆。你可以回答任何飲食、運動、當日計畫的問題,並參考近期記錄給個人化建議。',
+    '如果學員明確要求調整某天的餐點食譜或運動內容,除了回覆之外,同時在 JSON 中帶上修改後的完整內容;',
+    '沒有要求調整就不要帶 mealUpdates / workoutUpdates。',
+    '',
+    '只回傳 JSON,不要任何其他文字,格式如下:',
+    `{
+  "reply": "給學員的回覆(繁體中文,具體、簡潔,可用換行分段)",
+  "mealUpdates": [
+    { "date": "YYYY-MM-DD", "mealType": "breakfast|lunch|dinner",
+      "meal": { "name": "", "kcal": 0, "protein": 0, "carb": 0, "fat": 0, "ingredients": [], "steps": [], "tip": "" } }
+  ],
+  "workoutUpdates": [
+    { "date": "YYYY-MM-DD",
+      "day": { "date": "YYYY-MM-DD", "type": "strength|cardio|mixed|rest", "focus": "", "duration": "", "timing": "",
+               "items": [ { "name": "", "detail": "", "howTo": "", "muscles": "" } ] } }
+  ]
+}`,
+    'mealUpdates 與 workoutUpdates 為選填,只在學員要求調整時出現。',
+  ].join('\n');
+  return ask({ system: personaPrompt(), prompt, json: true, maxTokens: 4096, timeoutMs: 120000 });
+}
+
+// ---- 週報 ----
+export function aiWeekReport({ days, weights }) {
+  const dayLines = days
+    .map((d) => `- ${d.date}(${weekdayOf(d.date)}):進食 ${d.totals.calories} kcal(蛋白質 ${d.totals.protein} g),記錄 ${d.mealCount} 餐,運動完成 ${d.workoutDoneCount}/${d.workoutTotal || 0} 項`)
+    .join('\n');
+  const weightLines = weights.length ? weights.map((w) => `- ${w.date}:${w.kg} kg`).join('\n') : '(本週沒有體重記錄)';
+  const prompt = [
+    '請根據以下一週數據,以教練身分寫一份簡短週報(繁體中文、純文字、不要 JSON):',
+    '',
+    '【每日進食與運動】',
+    dayLines,
+    '',
+    '【體重記錄】',
+    weightLines,
+    '',
+    '週報包含:1) 本週整體表現(先肯定做得好的地方) 2) 飲食與運動各一個最需要改進的點 3) 下週 2-3 個具體行動建議。全文 200 字以內。',
+  ].join('\n');
+  return ask({ system: personaPrompt(), prompt, maxTokens: 1024, timeoutMs: 90000 });
+}
+
+// ---- 測試 API key ----
+export function aiTestKey() {
+  return ask({ prompt: '回覆「OK」兩個字母就好。', maxTokens: 16, model: 'claude-haiku-4-5-20251001', timeoutMs: 30000 });
+}
