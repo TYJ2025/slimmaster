@@ -8,7 +8,7 @@ import {
   exportBackup, restoreFromObject, storageStats,
 } from './store.js';
 import {
-  hasKey, aiWeekMeals, aiWeekWorkout, aiAnalyzeMeal, aiChat, aiWeekReport, aiTestKey, weekdayOf,
+  hasKey, aiDayMeals, aiDayWorkout, aiAnalyzeMeal, aiChat, aiWeekReport, aiTestKey, weekdayOf,
 } from './ai.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -27,6 +27,7 @@ const S = {
   planView: 'meals',
   planWeekStart: weekStartOf(localDateStr()),
   genBusy: { meals: false, workout: false },
+  genProgress: { meals: null, workout: null }, // { done, total } 分天產生進度
   logMealType: defaultMealType(),
   logPhoto: null,      // { b64, blob }
   logPhotoUrl: null,
@@ -223,7 +224,7 @@ function renderToday() {
   } else {
     mealsHTML = `
       <div class="empty"><span class="big-emoji">🥗</span>本週還沒有菜單<br/>
-      <button class="btn" id="gen-meals-today" style="margin-top:12px" ${S.genBusy.meals ? 'disabled' : ''}>${S.genBusy.meals ? '<span class="spinner"></span> 規劃中,請保持畫面開著…' : '請教練排本週菜單'}</button></div>`;
+      <button class="btn" id="gen-meals-today" style="margin-top:12px" ${S.genBusy.meals ? 'disabled' : ''}>${S.genBusy.meals ? `<span class="spinner"></span> 規劃中 ${S.genProgress.meals ? `${S.genProgress.meals.done}/${S.genProgress.meals.total} 天` : ''}…請保持畫面開著` : '請教練排本週菜單'}</button></div>`;
   }
 
   let woHTML;
@@ -251,7 +252,7 @@ function renderToday() {
   } else {
     woHTML = `
       <div class="empty"><span class="big-emoji">🏋️</span>本週還沒有運動計畫<br/>
-      <button class="btn" id="gen-wo-today" style="margin-top:12px" ${S.genBusy.workout ? 'disabled' : ''}>${S.genBusy.workout ? '<span class="spinner"></span> 規劃中,請保持畫面開著…' : '請教練排本週訓練'}</button></div>`;
+      <button class="btn" id="gen-wo-today" style="margin-top:12px" ${S.genBusy.workout ? 'disabled' : ''}>${S.genBusy.workout ? `<span class="spinner"></span> 規劃中 ${S.genProgress.workout ? `${S.genProgress.workout.done}/${S.genProgress.workout.total} 天` : ''}…請保持畫面開著` : '請教練排本週訓練'}</button></div>`;
   }
 
   const logged = day.meals || [];
@@ -441,32 +442,63 @@ function renderLog() {
 }
 
 // ================= 計畫 =================
-async function generatePlan(kind, weekStart, note = '') {
-  if (S.genBusy[kind]) return toast('教練正在規劃中,請稍候(最多幾分鐘)…');
+// 分天產生:每天一個小請求(快、手機上穩),逐天存檔;中途中斷會保留已完成的天數,
+// 再按一次會從還沒排的那天接續。fresh=true 時先清空、整週重排。
+async function generatePlan(kind, weekStart, note = '', fresh = false) {
+  if (S.genBusy[kind]) return toast('教練正在規劃中,請稍候…');
   if (!hasKey()) { toast('請先到「我的」設定 API key'); switchTab('me'); return; }
+
+  const dates = weekDates(weekStart);
+  const week = getWeek(weekStart);
+  const key = kind === 'meals' ? 'mealPlan' : 'workoutPlan';
+  if (fresh || !week[key] || !Array.isArray(week[key].days)) {
+    week[key] = kind === 'meals' ? { summary: '', days: [] } : { summary: '', scheduleNote: '', days: [] };
+  }
+  const plan = week[key];
+
   S.genBusy[kind] = true;
+  S.genProgress[kind] = { done: plan.days.length, total: dates.length };
+  render();
+
+  const recent = kind === 'meals'
+    ? lastDays(S.date, 7).flatMap((d) => (DB.days[d.date]?.meals || []).map((m) => m.name).filter(Boolean)).slice(-15).join('、')
+    : '';
+
   try {
-    render();
-    const dates = weekDates(weekStart);
+    for (let i = 0; i < dates.length; i++) {
+      const date = dates[i];
+      if (plan.days.some((d) => d.date === date)) continue; // 已排過 → 跳過(接續)
+      let day;
+      if (kind === 'meals') {
+        const usedNames = plan.days.flatMap((d) => Object.values(d.meals || {}).map((m) => m?.name).filter(Boolean)).join('、');
+        day = await aiDayMeals({ date, note, recentMeals: recent, usedNames });
+        if (!day?.meals) throw new Error(`${md(date)} 回傳格式不完整`);
+      } else {
+        const weekSoFar = plan.days.map((d) => `${weekdayOf(d.date)}:${TYPE_LABELS[d.type] || d.type}`).join('、');
+        day = await aiDayWorkout({ date, note, weekSoFar, dayIndex: i, total: dates.length });
+        if (!day?.date) day = { ...day, date };
+      }
+      day.date = date;
+      plan.days = plan.days.filter((d) => d.date !== date).concat([day]).sort((a, b) => a.date.localeCompare(b.date));
+      S.genProgress[kind] = { done: plan.days.length, total: dates.length };
+      save();
+      render();
+    }
+    // 完成:補一句 summary
     if (kind === 'meals') {
-      const recent = lastDays(S.date, 7)
-        .flatMap((d) => (DB.days[d.date]?.meals || []).map((m) => m.name).filter(Boolean))
-        .slice(-15);
-      const plan = await aiWeekMeals({ dates, note, recentMeals: recent.join('、') });
-      if (!Array.isArray(plan?.days) || !plan.days.length) throw new Error('AI 回傳格式不完整,請再試一次');
-      getWeek(weekStart).mealPlan = plan;
+      const avg = Math.round(plan.days.reduce((s, d) => s + ['breakfast', 'lunch', 'dinner'].reduce((x, k) => x + (d.meals?.[k]?.kcal || 0), 0), 0) / (plan.days.length || 1));
+      plan.summary = `本週 ${plan.days.length} 天菜單,平均每日約 ${avg} kcal`;
     } else {
-      const plan = await aiWeekWorkout({ dates, note });
-      if (!Array.isArray(plan?.days) || !plan.days.length) throw new Error('AI 回傳格式不完整,請再試一次');
-      getWeek(weekStart).workoutPlan = plan;
+      const cnt = plan.days.reduce((a, d) => { a[d.type] = (a[d.type] || 0) + 1; return a; }, {});
+      plan.summary = `本週訓練:重訓 ${cnt.strength || 0} 天・有氧 ${cnt.cardio || 0} 天・休息 ${cnt.rest || 0} 天`;
     }
     save();
     toast(kind === 'meals' ? '本週菜單完成!' : '本週運動計畫完成!');
   } catch (e) {
-    toast(e.message);
+    toast(`${e.message}。已完成 ${plan.days.length}/${dates.length} 天,再按一次可接續。`);
   } finally {
-    // 無論成功、失敗或逾時,busy 一定復位,按鈕不會再「按了沒反應」
     S.genBusy[kind] = false;
+    S.genProgress[kind] = null;
     render();
   }
 }
@@ -478,8 +510,12 @@ function renderPlan() {
   const endStr = `${endD.getMonth() + 1}/${endD.getDate()}`;
   const w = getWeek(ws);
   const view = S.planView;
-  const busy = S.genBusy[view === 'meals' ? 'meals' : 'workout'];
+  const gk = view === 'meals' ? 'meals' : 'workout';
+  const busy = S.genBusy[gk];
+  const prog = S.genProgress[gk];
   const plan = view === 'meals' ? w.mealPlan : w.workoutPlan;
+  const dayCount = plan?.days?.length || 0;
+  const complete = dayCount >= 7;
 
   let bodyHTML = '';
   if (view === 'meals') {
@@ -535,7 +571,13 @@ function renderPlan() {
     <div class="card">
       <input id="gen-note" placeholder="特別需求(選填):如「週三晚上聚餐」「肩膀不舒服」"/>
       <button class="btn block" id="gen-btn" style="margin-top:10px" ${busy ? 'disabled' : ''}>
-        ${busy ? '<span class="spinner"></span> 教練規劃中,約 1-2 分鐘,請保持畫面開著…' : `${plan ? '重新' : ''}產生${view === 'meals' ? '本週菜單' : '本週運動計畫'}`}
+        ${busy
+          ? `<span class="spinner"></span> 教練規劃中 ${prog ? `${prog.done}/${prog.total} 天` : ''}…請保持畫面開著`
+          : (!plan || dayCount === 0)
+            ? `產生${view === 'meals' ? '本週菜單' : '本週運動計畫'}`
+            : !complete
+              ? `繼續產生(還差 ${7 - dayCount} 天)`
+              : `重新產生${view === 'meals' ? '本週菜單' : '本週運動計畫'}`}
       </button>
     </div>
     ${bodyHTML}`;
@@ -545,8 +587,9 @@ function renderPlan() {
   $$('[data-v]').forEach((el) => (el.onclick = () => { S.planView = el.dataset.v; renderPlan(); }));
   $('#gen-btn').onclick = async () => {
     const note = $('#gen-note').value.trim();
-    if (plan && !(await confirmDialog('已有計畫,要重新產生並覆蓋嗎?', '重新產生'))) return;
-    generatePlan(view === 'meals' ? 'meals' : 'workout', ws, note);
+    // 已排滿 7 天才需確認覆蓋;未排滿則直接接續產生
+    if (complete && !(await confirmDialog('本週已排滿,要全部重新產生並覆蓋嗎?', '重新產生'))) return;
+    generatePlan(gk, ws, note, complete /* fresh:滿週重排,未滿則接續 */);
   };
   $$('[data-r]').forEach((el) => (el.onclick = () => {
     const [date, k] = el.dataset.r.split('|');

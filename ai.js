@@ -197,6 +197,52 @@ export function aiWeekWorkout({ dates, note }) {
   return ask({ system: personaPrompt(), prompt, json: true, timeoutMs: 300000 });
 }
 
+// ---- 單日菜單(分天產生,手機上較穩、不逾時)----
+export function aiDayMeals({ date, note, recentMeals, usedNames }) {
+  const prompt = [
+    `請為學員規劃 ${date}(${weekdayOf(date)})這「一天」的三餐(早餐、午餐、晚餐)。`,
+    '原則:三餐加總貼近每日熱量目標(±5%)、蛋白質達標;食譜要忙碌上班族做得出來(步驟≤4,或直接給超商/外食組合);每餐附一個 tip。',
+    note ? `本週特別需求:${note}` : '',
+    usedNames ? `本週其他天已安排(請避免重複):${usedNames}` : '',
+    recentMeals ? `最近實際吃過(避免重複、貼近口味):${recentMeals}` : '',
+    '',
+    '只回傳 JSON,不要任何其他文字,格式如下:',
+    `{
+  "date": "${date}",
+  "meals": {
+    "breakfast": { "name": "餐點名", "kcal": 400, "protein": 25, "carb": 40, "fat": 12, "ingredients": ["食材與份量"], "steps": ["步驟"], "tip": "外食替代或訣竅" },
+    "lunch":     { "格式同 breakfast": "" },
+    "dinner":    { "格式同 breakfast": "" }
+  }
+}`,
+    'ingredients 最多 6 項、steps 最多 4 步。',
+  ].filter(Boolean).join('\n');
+  return ask({ system: personaPrompt(), prompt, json: true, maxTokens: 2048, timeoutMs: 90000 });
+}
+
+// ---- 單日運動(分天產生)----
+export function aiDayWorkout({ date, note, weekSoFar, dayIndex, total }) {
+  const prompt = [
+    `請為學員規劃 ${date}(${weekdayOf(date)})這「一天」的運動(這是本週第 ${dayIndex + 1}/${total} 天)。`,
+    weekSoFar
+      ? `本週前面幾天已安排:${weekSoFar}。請據此平衡整週:約 2-4 天重訓、1-3 天有氧、至少 1 天完全休息。`
+      : '這是本週第一天,請開始安排,並讓整週約 2-4 天重訓、1-3 天有氧、至少 1 天完全休息。',
+    '每個動作要有 howTo(2-3 句動作要領含常見錯誤);給 timing(建議時段與用餐搭配);重訓 4-6 個動作標組數次數,有氧標強度與時間;休息日給 1-2 個輕鬆伸展即可。',
+    note ? `本週特別需求:${note}` : '',
+    '',
+    '只回傳 JSON,不要任何其他文字,格式如下:',
+    `{
+  "date": "${date}",
+  "type": "strength | cardio | mixed | rest",
+  "focus": "訓練重點",
+  "duration": "約 40 分鐘",
+  "timing": "建議時段與用餐搭配",
+  "items": [ { "name": "動作名", "detail": "3 組 x 12 下", "howTo": "動作要領與常見錯誤", "muscles": "主要肌群" } ]
+}`,
+  ].filter(Boolean).join('\n');
+  return ask({ system: personaPrompt(), prompt, json: true, maxTokens: 2048, timeoutMs: 90000 });
+}
+
 // ---- 分析一餐(照片/文字)----
 export function aiAnalyzeMeal({ description, imageB64, mealType, eatenToday }) {
   const mealLabel = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '點心' }[mealType] || '一餐';
