@@ -26,7 +26,7 @@ export function hasKey() {
   return !!(DB.settings.apiKey || '').trim();
 }
 
-async function ask({ system, prompt, imageB64 = null, json = false, maxTokens = 8192, model = null, timeoutMs = 120000 }) {
+async function ask({ system, prompt, imageB64 = null, json = false, maxTokens = 8192, model = null, timeoutMs = 120000, stream = true }) {
   const key = (DB.settings.apiKey || '').trim();
   if (!key) throw new Error('尚未設定 API key。請到「我的」→ AI 設定,貼上你的 Anthropic API key。');
 
@@ -56,7 +56,7 @@ async function ask({ system, prompt, imageB64 = null, json = false, maxTokens = 
           max_tokens: maxTokens,
           system: system || undefined,
           messages: [{ role: 'user', content }],
-          stream: true, // 串流:在手機網路上比一次等完整回應穩定
+          ...(stream ? { stream: true } : {}),
         }),
       });
     } catch (e) {
@@ -73,31 +73,48 @@ async function ask({ system, prompt, imageB64 = null, json = false, maxTokens = 
       throw new Error(`API 錯誤 ${res.status}:${msg || type || '未知錯誤'}`);
     }
 
-    // 讀取 SSE 串流,把文字增量拼起來
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buf = '', text = '';
-    try {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        const lines = buf.split('\n');
-        buf = lines.pop();
-        for (const raw of lines) {
-          const line = raw.trim();
-          if (!line.startsWith('data:')) continue;
-          const payload = line.slice(5).trim();
-          if (!payload) continue;
-          let ev;
-          try { ev = JSON.parse(payload); } catch { continue; }
-          if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') text += ev.delta.text;
-          else if (ev.type === 'error') throw new Error(ev.error?.message || 'API 串流中斷,請再試一次。');
-        }
+    let text = '', stopReason = '';
+    if (!stream) {
+      // 非串流:小請求最穩,一次拿完整 JSON,不經 SSE 解析
+      let data;
+      try { data = await res.json(); } catch (e) {
+        if (e.name === 'AbortError') throw timeoutError;
+        throw new Error('回應解析失敗,請再試一次。');
       }
-    } catch (e) {
-      if (e.name === 'AbortError') throw timeoutError;
-      throw e;
+      text = (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+      stopReason = data.stop_reason || '';
+    } else {
+      // 讀取 SSE 串流,把文字增量拼起來
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop();
+          for (const raw of lines) {
+            const line = raw.trim();
+            if (!line.startsWith('data:')) continue;
+            const payload = line.slice(5).trim();
+            if (!payload) continue;
+            let ev;
+            try { ev = JSON.parse(payload); } catch { continue; }
+            if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') text += ev.delta.text;
+            else if (ev.type === 'message_delta' && ev.delta?.stop_reason) stopReason = ev.delta.stop_reason;
+            else if (ev.type === 'error') throw new Error(ev.error?.message || 'API 串流中斷,請再試一次。');
+          }
+        }
+      } catch (e) {
+        if (e.name === 'AbortError') throw timeoutError;
+        throw e;
+      }
+    }
+
+    if (json && !text.trim()) {
+      throw new Error(`模型沒有回傳內容${stopReason ? `(原因:${stopReason})` : ''},請再試一次。`);
     }
     return json ? extractJson(text) : text;
   } finally {
@@ -217,7 +234,7 @@ export function aiDayMeals({ date, note, recentMeals, usedNames }) {
 }`,
     'ingredients 最多 6 項、steps 最多 4 步。',
   ].filter(Boolean).join('\n');
-  return ask({ system: personaPrompt(), prompt, json: true, maxTokens: 2048, timeoutMs: 90000 });
+  return ask({ system: personaPrompt(), prompt, json: true, maxTokens: 4096, timeoutMs: 90000, stream: false });
 }
 
 // ---- 單日運動(分天產生)----
@@ -240,7 +257,7 @@ export function aiDayWorkout({ date, note, weekSoFar, dayIndex, total }) {
   "items": [ { "name": "動作名", "detail": "3 組 x 12 下", "howTo": "動作要領與常見錯誤", "muscles": "主要肌群" } ]
 }`,
   ].filter(Boolean).join('\n');
-  return ask({ system: personaPrompt(), prompt, json: true, maxTokens: 2048, timeoutMs: 90000 });
+  return ask({ system: personaPrompt(), prompt, json: true, maxTokens: 4096, timeoutMs: 90000, stream: false });
 }
 
 // ---- 分析一餐(照片/文字)----
