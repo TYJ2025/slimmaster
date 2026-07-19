@@ -483,8 +483,9 @@ function renderLog() {
 }
 
 // ================= 計畫 =================
-// 分天產生:每天一個小請求(快、手機上穩),逐天存檔;中途中斷會保留已完成的天數,
-// 再按一次會從還沒排的那天接續。fresh=true 時先清空、整週重排。
+// 分天產生:每天一個小請求(手機上穩),但改成「分批並行」(一次最多 4 天同時發),
+// 逐批存檔;中途中斷會保留已完成的天數,再按一次會從還沒排的那天接續。
+// fresh=true 時先清空、整週重排。
 async function generatePlan(kind, weekStart, note = '', fresh = false) {
   if (S.genBusy[kind]) return toast('教練正在規劃中,請稍候…');
   if (!hasKey()) { toast('請先到「我的」設定 API key'); switchTab('me'); return; }
@@ -506,27 +507,49 @@ async function generatePlan(kind, weekStart, note = '', fresh = false) {
     : '';
 
   try {
-    for (let i = 0; i < dates.length; i++) {
-      const date = dates[i];
-      if (plan.days.some((d) => d.date === date)) continue; // 已排過 → 跳過(接續)
-      let day;
-      const dayTarget = targetsForDate(date, DB.targets);
-      if (kind === 'meals') {
-        const usedNames = plan.days.flatMap((d) => Object.values(d.meals || {}).map((m) => m?.name).filter(Boolean)).join('、');
-        day = await aiDayMeals({ date, note, recentMeals: recent, usedNames, dayTarget });
-        if (!day?.meals) throw new Error(`${md(date)} 回傳格式不完整`);
-      } else {
-        const weekSoFar = plan.days.map((d) => `${weekdayOf(d.date)}:${TYPE_LABELS[d.type] || d.type}`).join('、');
-        day = await aiDayWorkout({ date, note, weekSoFar, dayIndex: i, total: dates.length, dayTarget });
-        if (!day?.date) day = { ...day, date };
+    // 尚未排的日期(接續:已排過的跳過)。分批「並行」產生 → 大幅縮短等待時間;
+    // 每批最多 CONC 天同時發請求,批與批之間會把已完成的餐點名帶入,盡量避免整週重複。
+    const CONC = 4;
+    const pending = dates.filter((date) => !plan.days.some((d) => d.date === date));
+    let failed = 0, lastErr = null;
+
+    for (let w = 0; w < pending.length; w += CONC) {
+      const wave = pending.slice(w, w + CONC);
+      const usedNames = kind === 'meals'
+        ? plan.days.flatMap((d) => Object.values(d.meals || {}).map((m) => m?.name).filter(Boolean)).join('、')
+        : '';
+      const weekSoFar = kind === 'meals'
+        ? ''
+        : plan.days.map((d) => `${weekdayOf(d.date)}:${TYPE_LABELS[d.type] || d.type}`).join('、');
+
+      const results = await Promise.allSettled(wave.map(async (date) => {
+        const dayTarget = targetsForDate(date, DB.targets);
+        let day;
+        if (kind === 'meals') {
+          day = await aiDayMeals({ date, note, recentMeals: recent, usedNames, dayTarget });
+          if (!day?.meals) throw new Error(`${md(date)} 回傳格式不完整`);
+        } else {
+          day = await aiDayWorkout({ date, note, weekSoFar, dayIndex: dates.indexOf(date), total: dates.length, dayTarget });
+          if (!day?.date) day = { ...day, date };
+        }
+        if (dayTarget?.type) day.carbDay = dayTarget.type;
+        day.date = date;
+        return day;
+      }));
+
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          const day = r.value;
+          plan.days = plan.days.filter((d) => d.date !== day.date).concat([day]).sort((a, b) => a.date.localeCompare(b.date));
+        } else {
+          failed++; lastErr = r.reason;
+        }
       }
-      if (dayTarget?.type) day.carbDay = dayTarget.type;
-      day.date = date;
-      plan.days = plan.days.filter((d) => d.date !== date).concat([day]).sort((a, b) => a.date.localeCompare(b.date));
       S.genProgress[kind] = { done: plan.days.length, total: dates.length };
       save();
       render();
     }
+    if (failed) throw lastErr || new Error(`有 ${failed} 天未完成`);
     // 完成:補一句 summary
     if (kind === 'meals') {
       const avg = Math.round(plan.days.reduce((s, d) => s + ['breakfast', 'lunch', 'dinner'].reduce((x, k) => x + (d.meals?.[k]?.kcal || 0), 0), 0) / (plan.days.length || 1));
