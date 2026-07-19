@@ -307,7 +307,7 @@ export function aiDayMeals({ date, note, recentMeals, usedNames, dayTarget = nul
     'ingredients 最多 6 項、steps 最多 4 步。',
   ].filter(Boolean).join('\n');
   // 串流 + 較長逾時:大份食譜 JSON 用串流較不會卡在整包等待而逾時。
-  return ask({ system: personaPrompt(date), prompt, json: true, maxTokens: 4096, timeoutMs: 240000, stream: true });
+  return ask({ system: personaPrompt(date), prompt, json: true, maxTokens: 8192, timeoutMs: 240000, stream: true });
 }
 
 // ---- 單日運動(分天產生)----
@@ -336,7 +336,7 @@ export function aiDayWorkout({ date, note, weekSoFar, dayIndex, total, dayTarget
   "items": [ { "name": "動作名", "detail": "3 組 x 12 下", "howTo": "動作要領與常見錯誤", "muscles": "主要肌群" } ]
 }`,
   ].filter(Boolean).join('\n');
-  return ask({ system: personaPrompt(date), prompt, json: true, maxTokens: 4096, timeoutMs: 240000, stream: true });
+  return ask({ system: personaPrompt(date), prompt, json: true, maxTokens: 8192, timeoutMs: 240000, stream: true });
 }
 
 // ---- 分析一餐(照片/文字)----
