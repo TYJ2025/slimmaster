@@ -1,6 +1,6 @@
 // 享瘦高手 — 純手機版 PWA(免伺服器)
 // 資料只存在本機(localStorage + IndexedDB),AI 直連 Anthropic API。
-import { calcTargets } from './nutrition.js';
+import { calcTargets, targetsForDate, carbTypeForDate, CARB_DAY_TYPES, INTENSITIES } from './nutrition.js';
 import {
   DB, save, localDateStr, weekStartOf, weekDates, shiftWeek,
   getDay, dayTotals, getWeek, lastDays, addChat,
@@ -20,6 +20,44 @@ const MEAL_LABELS = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', sn
 const MEAL_EMOJI = { breakfast: '🍳', lunch: '🍱', dinner: '🍲', snack: '🍎', other: '🍽️' };
 const TYPE_LABELS = { strength: '重訓', cardio: '有氧', mixed: '重訓+有氧', rest: '休息' };
 const GOAL_LABELS = { lose: '減脂', recomp: '增肌減脂', gain: '增肌', maintain: '維持' };
+
+// 當日有效目標(碳循環):有 cycle 時回當日碳日目標,否則回平均目標。
+function effTargets(dateStr) {
+  const d = targetsForDate(dateStr, DB.targets);
+  return d || { type: null, label: '', calorieTarget: DB.targets?.calorieTarget || 0, macros: DB.targets?.macros || {} };
+}
+// 碳日小標籤 HTML(type 為 high/mid/low)。
+function carbBadge(type) {
+  if (!type || !CARB_DAY_TYPES[type]) return '';
+  const d = CARB_DAY_TYPES[type];
+  return `<span class="badge carb-${type}">${d.emoji} ${d.label}</span>`;
+}
+// 碳循環總覽:三種碳日目標 + 本週輪替。
+function cycleOverviewHTML(targets) {
+  const cyc = targets?.cycle;
+  if (!cyc?.byType) return '';
+  const typeRows = ['high', 'mid', 'low'].map((k) => {
+    const d = cyc.byType[k];
+    return `<div class="carb-row">
+      ${carbBadge(k)}
+      <span class="muted small" style="margin-left:auto">${d.calorieTarget} kcal・蛋白 ${d.macros.proteinG} / 碳 ${d.macros.carbG} / 脂 ${d.macros.fatG} g</span>
+    </div>`;
+  }).join('');
+  const weekRow = cyc.pattern.map((k, i) => `
+    <div class="carb-week-cell carb-${k}">
+      <div class="wd">${cyc.weekdayLabels[i].replace('週', '')}</div>
+      <div class="em">${CARB_DAY_TYPES[k].emoji}</div>
+    </div>`).join('');
+  const cnt = cyc.counts || {};
+  return `
+    <div class="card">
+      <h2>碳循環設定 <span class="muted small">(${(INTENSITIES[cyc.intensity] || INTENSITIES.auto).label})</span></h2>
+      ${typeRows}
+      <div class="muted small" style="margin:10px 0 4px">本週輪替(高 ${cnt.high || 0}・中 ${cnt.mid || 0}・低 ${cnt.low || 0} 天)</div>
+      <div class="carb-week">${weekRow}</div>
+      <div class="muted small" style="margin-top:8px">高碳日=重訓日、中碳日=中強度/有氧、低碳日=休息或低強度有氧。要調整強度到「個人檔案」修改「碳循環強度」。</div>
+    </div>`;
+}
 
 const S = {
   tab: 'today',
@@ -195,7 +233,7 @@ function bindDeleteButtons(rerender) {
 }
 
 function renderToday() {
-  const t = DB.targets || {};
+  const t = effTargets(S.date);
   const day = getDay(S.date);
   const totals = dayTotals(day);
   const week = getWeek(weekStartOf(S.date));
@@ -231,7 +269,8 @@ function renderToday() {
   if (woDay) {
     const items = woDay.items || [];
     woHTML = `
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+        ${carbBadge(woDay.carbDay || carbTypeForDate(S.date, DB.targets?.cycle))}
         <span class="badge ${esc(woDay.type)}">${TYPE_LABELS[woDay.type] || esc(woDay.type)}</span>
         <b>${esc(woDay.focus || '')}</b>
         <span class="muted small" style="margin-left:auto">${esc(woDay.duration || '')}</span>
@@ -262,6 +301,7 @@ function renderToday() {
       <div class="date-chip">${md(S.date)} ${weekdayOf(S.date)}</div>
     </div>
     <div class="card">
+      ${t.type ? `<div class="carb-head">${carbBadge(t.type)}<span class="muted small">${esc(CARB_DAY_TYPES[t.type].desc)}</span></div>` : ''}
       <div class="hero">
         ${ringHTML(totals.calories, t.calorieTarget)}
         <div class="macros">
@@ -410,6 +450,7 @@ function renderLog() {
         imageB64: S.logPhoto?.b64 || null,
         mealType: S.logMealType,
         eatenToday,
+        date: S.date,
       });
       const meal = {
         id: newId(),
@@ -469,15 +510,17 @@ async function generatePlan(kind, weekStart, note = '', fresh = false) {
       const date = dates[i];
       if (plan.days.some((d) => d.date === date)) continue; // 已排過 → 跳過(接續)
       let day;
+      const dayTarget = targetsForDate(date, DB.targets);
       if (kind === 'meals') {
         const usedNames = plan.days.flatMap((d) => Object.values(d.meals || {}).map((m) => m?.name).filter(Boolean)).join('、');
-        day = await aiDayMeals({ date, note, recentMeals: recent, usedNames });
+        day = await aiDayMeals({ date, note, recentMeals: recent, usedNames, dayTarget });
         if (!day?.meals) throw new Error(`${md(date)} 回傳格式不完整`);
       } else {
         const weekSoFar = plan.days.map((d) => `${weekdayOf(d.date)}:${TYPE_LABELS[d.type] || d.type}`).join('、');
-        day = await aiDayWorkout({ date, note, weekSoFar, dayIndex: i, total: dates.length });
+        day = await aiDayWorkout({ date, note, weekSoFar, dayIndex: i, total: dates.length, dayTarget });
         if (!day?.date) day = { ...day, date };
       }
+      if (dayTarget?.type) day.carbDay = dayTarget.type;
       day.date = date;
       plan.days = plan.days.filter((d) => d.date !== date).concat([day]).sort((a, b) => a.date.localeCompare(b.date));
       S.genProgress[kind] = { done: plan.days.length, total: dates.length };
@@ -523,7 +566,7 @@ function renderPlan() {
       ${plan.summary ? `<div class="callout green" style="margin-bottom:12px">📋 ${esc(plan.summary)}</div>` : ''}
       ${(plan.days || []).map((d) => `
         <div class="card day-card ${d.date === S.date ? 'today-card' : ''}">
-          <div class="day-head"><span class="d">${md(d.date)} ${weekdayOf(d.date)}${d.date === S.date ? '(今天)' : ''}</span>
+          <div class="day-head"><span class="d">${md(d.date)} ${weekdayOf(d.date)}${d.date === S.date ? '(今天)' : ''} ${carbBadge(d.carbDay || carbTypeForDate(d.date, DB.targets?.cycle))}</span>
             <span class="muted small">${['breakfast','lunch','dinner'].reduce((s, k) => s + (d.meals?.[k]?.kcal || 0), 0)} kcal</span></div>
           ${['breakfast', 'lunch', 'dinner'].map((k) => {
             const m = d.meals?.[k];
@@ -538,7 +581,7 @@ function renderPlan() {
       ${(plan.days || []).map((d) => `
         <div class="card day-card ${d.date === S.date ? 'today-card' : ''}">
           <div class="day-head">
-            <span class="d">${md(d.date)} ${weekdayOf(d.date)}${d.date === S.date ? '(今天)' : ''}</span>
+            <span class="d">${md(d.date)} ${weekdayOf(d.date)}${d.date === S.date ? '(今天)' : ''} ${carbBadge(d.carbDay || carbTypeForDate(d.date, DB.targets?.cycle))}</span>
             <span class="badge ${esc(d.type)}">${TYPE_LABELS[d.type] || esc(d.type)}</span>
           </div>
           <div style="font-weight:700;font-size:14px">${esc(d.focus || '')} <span class="muted small">${esc(d.duration || '')}</span></div>
@@ -608,9 +651,11 @@ function chatContext() {
   const woDay = week.workoutPlan?.days?.find((d) => d.date === S.date);
   const day = getDay(S.date);
   const totals = dayTotals(day);
-  const t = DB.targets || {};
+  const t = effTargets(S.date);
 
-  const lines = ['【今日計畫】'];
+  const lines = [];
+  if (t.type) lines.push(`【今天是${t.label}】目標約 ${t.calorieTarget} kcal(蛋白質 ${t.macros?.proteinG} / 碳水 ${t.macros?.carbG} / 脂肪 ${t.macros?.fatG} g)`);
+  lines.push('【今日計畫】');
   if (mealDay) {
     for (const [k, label] of Object.entries({ breakfast: '早餐', lunch: '午餐', dinner: '晚餐' })) {
       const m = mealDay.meals?.[k];
@@ -759,7 +804,10 @@ function profileFormHTML(p = {}) {
           <select name="activity">${opt('sedentary', '久坐(很少運動)', p.activity)}${opt('light', '輕度(週 1-3 次)', p.activity || 'light')}${opt('moderate', '中度(週 3-5 次)', p.activity)}${opt('active', '高度(週 6-7 次)', p.activity)}</select></label>
         <label class="field"><span>速度</span>
           <select name="rate">${opt('slow', '和緩(週 0.25kg)', p.rate)}${opt('moderate', '標準(週 0.5kg)', p.rate || 'moderate')}${opt('fast', '積極(週 0.75kg)', p.rate)}</select></label>
+        <label class="field"><span>碳循環強度</span>
+          <select name="intensity">${opt('auto', '依目標(標準)', p.intensity || 'aggressive')}${opt('aggressive', '偏激進(多低碳日)', p.intensity || 'aggressive')}${opt('gentle', '溫和(均衡循環)', p.intensity)}</select></label>
       </div>
+      <div class="muted small" style="margin:-4px 2px 8px">碳循環:高碳日(訓練日)吃較多碳水並排重訓,低碳日減碳並休息或低強度有氧,週間輪替以加速減脂。</div>
       <label class="field"><span>飲食限制/過敏(選填)</span><input name="restrictions" value="${esc(p.restrictions || '')}" placeholder="例:不吃牛、乳糖不耐"/></label>
       <label class="field"><span>口味偏好(選填)</span><input name="preferences" value="${esc(p.preferences || '')}" placeholder="例:愛吃辣、常吃超商"/></label>
       <label class="field"><span>可用運動器材(選填)</span><input name="equipment" value="${esc(p.equipment || '')}" placeholder="例:啞鈴一組、健身房會員、只能徒手"/></label>
@@ -776,7 +824,7 @@ function bindProfileForm(afterSave) {
     const profile = {
       gender: p.gender, age: Number(p.age), heightCm: Number(p.heightCm), weightKg: Number(p.weightKg),
       targetWeightKg: p.targetWeightKg ? Number(p.targetWeightKg) : null,
-      activity: p.activity, goal: p.goal, rate: p.rate,
+      activity: p.activity, goal: p.goal, rate: p.rate, intensity: p.intensity || 'aggressive',
       restrictions: p.restrictions || '', preferences: p.preferences || '',
       equipment: p.equipment || '', scheduleNote: p.scheduleNote || '',
     };
@@ -808,15 +856,17 @@ function renderMe() {
       <div class="brand">👤 我的<small>目標、進度與設定</small></div>
     </div>
     <div class="card">
-      <h2>每日目標</h2>
+      <h2>每日目標 <span class="muted small">(碳循環週均)</span></h2>
       <div class="stat-grid">
-        <div class="stat"><div class="v">${t.calorieTarget || '—'}</div><div class="l">目標熱量 kcal</div></div>
+        <div class="stat"><div class="v">${t.calorieTarget || '—'}</div><div class="l">週均熱量 kcal</div></div>
         <div class="stat"><div class="v">${t.macros?.proteinG || '—'} g</div><div class="l">蛋白質目標</div></div>
         <div class="stat"><div class="v">${t.tdee || '—'}</div><div class="l">TDEE kcal</div></div>
         <div class="stat"><div class="v">${t.bmr || '—'}</div><div class="l">BMR kcal</div></div>
       </div>
       <div class="muted small" style="margin-top:8px">目標:${GOAL_LABELS[p.goal] || '—'}${p.targetWeightKg ? `・目標體重 ${p.targetWeightKg} kg` : ''}</div>
     </div>
+
+    ${cycleOverviewHTML(t)}
 
     <div class="card">
       <h2>體重記錄</h2>
@@ -989,6 +1039,12 @@ $$('#tabbar button').forEach((b) => (b.onclick = () => switchTab(b.dataset.tab))
 
 // ================= 啟動 =================
 (function boot() {
+  // 遷移:舊資料補上碳循環設定(intensity 預設偏激進),讓既有使用者自動升級。
+  if (DB.profile && (!DB.targets || !DB.targets.cycle)) {
+    if (!DB.profile.intensity) DB.profile.intensity = 'aggressive';
+    DB.targets = calcTargets(DB.profile);
+    save();
+  }
   S.chatLocal = DB.chat.map((c) => ({ ...c }));
   updateBanner();
   $('#key-banner').onclick = () => switchTab('me');
