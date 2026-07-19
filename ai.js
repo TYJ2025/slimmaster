@@ -33,7 +33,28 @@ export function hasKey() {
   return !!(DB.settings.apiKey || '').trim();
 }
 
-async function ask({ system, prompt, imageB64 = null, json = false, maxTokens = 8192, model = null, timeoutMs = 120000, stream = true }) {
+// 對外:自動重試(暫時性錯誤才重試,如伺服器忙碌、請求太頻繁、逾時、連線問題)。
+// 認證錯誤、模型錯誤、格式錯誤等「一定會再錯」的狀況不重試,直接把訊息丟出來讓使用者看到。
+async function ask(opts) {
+  const maxTry = opts.retries ?? 2;
+  let lastErr;
+  for (let i = 0; i <= maxTry; i++) {
+    try {
+      return await askOnce(opts);
+    } catch (e) {
+      lastErr = e;
+      const transient = /忙碌|太頻繁|連不上|等太久沒有回應|串流中斷|API 錯誤 5/.test(e.message || '');
+      if (i < maxTry && transient) {
+        await new Promise((r) => setTimeout(r, 1500 * (i + 1))); // 1.5s、3s 退避
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr;
+}
+
+async function askOnce({ system, prompt, imageB64 = null, json = false, maxTokens = 8192, model = null, timeoutMs = 120000, stream = true }) {
   const key = (DB.settings.apiKey || '').trim();
   if (!key) throw new Error('尚未設定 API key。請到「我的」→ AI 設定,貼上你的 Anthropic API key。');
 
@@ -285,7 +306,8 @@ export function aiDayMeals({ date, note, recentMeals, usedNames, dayTarget = nul
 }`,
     'ingredients 最多 6 項、steps 最多 4 步。',
   ].filter(Boolean).join('\n');
-  return ask({ system: personaPrompt(date), prompt, json: true, maxTokens: 4096, timeoutMs: 90000, stream: false });
+  // 串流 + 較長逾時:大份食譜 JSON 用串流較不會卡在整包等待而逾時。
+  return ask({ system: personaPrompt(date), prompt, json: true, maxTokens: 4096, timeoutMs: 240000, stream: true });
 }
 
 // ---- 單日運動(分天產生)----
@@ -314,7 +336,7 @@ export function aiDayWorkout({ date, note, weekSoFar, dayIndex, total, dayTarget
   "items": [ { "name": "動作名", "detail": "3 組 x 12 下", "howTo": "動作要領與常見錯誤", "muscles": "主要肌群" } ]
 }`,
   ].filter(Boolean).join('\n');
-  return ask({ system: personaPrompt(date), prompt, json: true, maxTokens: 4096, timeoutMs: 90000, stream: false });
+  return ask({ system: personaPrompt(date), prompt, json: true, maxTokens: 4096, timeoutMs: 240000, stream: true });
 }
 
 // ---- 分析一餐(照片/文字)----

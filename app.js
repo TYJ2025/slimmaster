@@ -66,6 +66,7 @@ const S = {
   planWeekStart: weekStartOf(localDateStr()),
   genBusy: { meals: false, workout: false },
   genProgress: { meals: null, workout: null }, // { done, total } 分天產生進度
+  lastGenErr: { meals: '', workout: '' },      // 上次產生失敗的訊息(固定顯示,不再閃一下就消失)
   logMealType: defaultMealType(),
   logPhoto: null,      // { b64, blob }
   logPhotoUrl: null,
@@ -499,6 +500,7 @@ async function generatePlan(kind, weekStart, note = '', fresh = false) {
   const plan = week[key];
 
   S.genBusy[kind] = true;
+  S.lastGenErr[kind] = '';
   S.genProgress[kind] = { done: plan.days.length, total: dates.length };
   render();
 
@@ -509,7 +511,7 @@ async function generatePlan(kind, weekStart, note = '', fresh = false) {
   try {
     // 尚未排的日期(接續:已排過的跳過)。分批「並行」產生 → 大幅縮短等待時間;
     // 每批最多 CONC 天同時發請求,批與批之間會把已完成的餐點名帶入,盡量避免整週重複。
-    const CONC = 4;
+    const CONC = 3;
     const pending = dates.filter((date) => !plan.days.some((d) => d.date === date));
     let failed = 0, lastErr = null;
 
@@ -561,6 +563,7 @@ async function generatePlan(kind, weekStart, note = '', fresh = false) {
     save();
     toast(kind === 'meals' ? '本週菜單完成!' : '本週運動計畫完成!');
   } catch (e) {
+    S.lastGenErr[kind] = `${e.message}(已完成 ${plan.days.length}/${dates.length} 天,再按一次可接續)`;
     toast(`${e.message}。已完成 ${plan.days.length}/${dates.length} 天,再按一次可接續。`);
   } finally {
     S.genBusy[kind] = false;
@@ -645,6 +648,7 @@ function renderPlan() {
               ? `繼續產生(還差 ${7 - dayCount} 天)`
               : `重新產生${view === 'meals' ? '本週菜單' : '本週運動計畫'}`}
       </button>
+      ${!busy && S.lastGenErr[gk] ? `<div class="callout" style="margin-top:10px;background:#fee2e2;color:#b91c1c">⚠️ ${esc(S.lastGenErr[gk])}</div>` : ''}
     </div>
     ${bodyHTML}`;
 
