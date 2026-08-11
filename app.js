@@ -10,6 +10,7 @@ import {
 import {
   hasKey, aiDayMeals, aiDayWorkout, aiAnalyzeMeal, aiChat, aiWeekReport, aiTestKey, weekdayOf,
 } from './ai.js';
+import { installPresetSchedule } from './preset-schedule.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
@@ -23,6 +24,11 @@ const GOAL_LABELS = { lose: '減脂', recomp: '增肌減脂', gain: '增肌', ma
 
 // 當日有效目標(碳循環):有 cycle 時回當日碳日目標,否則回平均目標。
 function effTargets(dateStr) {
+  const week = DB.weeks?.[weekStartOf(dateStr)];
+  const mealDay = week?.mealPlan?.days?.find((d) => d.date === dateStr);
+  const workoutDay = week?.workoutPlan?.days?.find((d) => d.date === dateStr);
+  const override = mealDay?.carbDay || workoutDay?.carbDay;
+  if (override && DB.targets?.cycle?.byType?.[override]) return DB.targets.cycle.byType[override];
   const d = targetsForDate(dateStr, DB.targets);
   return d || { type: null, label: '', calorieTarget: DB.targets?.calorieTarget || 0, macros: DB.targets?.macros || {} };
 }
@@ -244,7 +250,10 @@ function renderToday() {
 
   let mealsHTML;
   if (mealDay) {
-    mealsHTML = ['breakfast', 'lunch', 'dinner'].map((k) => {
+    const alcoholHTML = mealDay.drinkingPlanned
+      ? `<div class="callout" style="margin-bottom:10px">🍷 ${esc(mealDay.alcoholNote || '今天保留飲酒彈性，請先吃正餐且不要空腹飲酒。')}</div>`
+      : '';
+    mealsHTML = alcoholHTML + ['breakfast', 'lunch', 'dinner'].map((k) => {
       const m = mealDay.meals?.[k];
       if (!m) return '';
       return `
@@ -594,6 +603,7 @@ function renderPlan() {
         <div class="card day-card ${d.date === S.date ? 'today-card' : ''}">
           <div class="day-head"><span class="d">${md(d.date)} ${weekdayOf(d.date)}${d.date === S.date ? '(今天)' : ''} ${carbBadge(d.carbDay || carbTypeForDate(d.date, DB.targets?.cycle))}</span>
             <span class="muted small">${['breakfast','lunch','dinner'].reduce((s, k) => s + (d.meals?.[k]?.kcal || 0), 0)} kcal</span></div>
+          ${d.drinkingPlanned ? `<div class="callout" style="margin:6px 0 8px">🍷 ${esc(d.alcoholNote || '')}</div>` : ''}
           ${['breakfast', 'lunch', 'dinner'].map((k) => {
             const m = d.meals?.[k];
             return m ? `<div class="plan-meal" data-r="${d.date}|${k}"><span class="ml">${MEAL_LABELS[k]}</span><span class="mn">${esc(m.name)}</span><span class="mk">${m.kcal} kcal ›</span></div>` : '';
@@ -858,6 +868,7 @@ function bindProfileForm(afterSave) {
     if (!profile.age || !profile.heightCm || !profile.weightKg) return toast('請完整填寫年齡、身高、體重');
     DB.profile = profile;
     DB.targets = calcTargets(profile);
+    installPresetSchedule(DB);
     save();
     toast('已儲存!目標已重新計算');
     afterSave();
@@ -1066,16 +1077,21 @@ $$('#tabbar button').forEach((b) => (b.onclick = () => switchTab(b.dataset.tab))
 
 // ================= 啟動 =================
 (function boot() {
+  let dirty = false;
   // 遷移:舊資料補上碳循環設定(intensity 預設偏激進),讓既有使用者自動升級。
   if (DB.profile && (!DB.targets || !DB.targets.cycle)) {
     if (!DB.profile.intensity) DB.profile.intensity = 'aggressive';
     DB.targets = calcTargets(DB.profile);
-    save();
+    dirty = true;
   }
+  const presetInstalled = installPresetSchedule(DB);
+  if (presetInstalled) dirty = true;
+  if (dirty) save();
   S.chatLocal = DB.chat.map((c) => ({ ...c }));
   updateBanner();
   $('#key-banner').onclick = () => switchTab('me');
   render();
+  if (presetInstalled) toast('已載入 8/12～8/23 免 API 菜單與運動排程');
   prunePhotos();
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
