@@ -1,6 +1,6 @@
 // 享瘦高手 — 純手機版 PWA(免伺服器)
 // 資料只存在本機(localStorage + IndexedDB),AI 直連 Anthropic API。
-import { calcTargets, targetsForDate, carbTypeForDate, CARB_DAY_TYPES, INTENSITIES } from './nutrition.js';
+import { calcTargets, targetsForDate, carbTypeForDate, CARB_DAY_TYPES, INTENSITIES, FOCUS_AREAS } from './nutrition.js';
 import {
   DB, save, localDateStr, weekStartOf, weekDates, shiftWeek,
   getDay, dayTotals, getWeek, lastDays, addChat,
@@ -841,10 +841,13 @@ function profileFormHTML(p = {}) {
           <select name="activity">${opt('sedentary', '久坐(很少運動)', p.activity)}${opt('light', '輕度(週 1-3 次)', p.activity || 'light')}${opt('moderate', '中度(週 3-5 次)', p.activity)}${opt('active', '高度(週 6-7 次)', p.activity)}</select></label>
         <label class="field"><span>速度</span>
           <select name="rate">${opt('slow', '和緩(週 0.25kg)', p.rate)}${opt('moderate', '標準(週 0.5kg)', p.rate || 'moderate')}${opt('fast', '積極(週 0.75kg)', p.rate)}</select></label>
+        <label class="field"><span>重點雕塑部位</span>
+          <select name="focusArea">${opt('whole', '全身均衡', p.focusArea || 'whole')}${opt('lower', '下半身(臀腿)', p.focusArea)}${opt('upper', '上半身(背肩手臂)', p.focusArea)}${opt('core', '核心 / 腹部', p.focusArea)}</select></label>
         <label class="field"><span>碳循環強度</span>
           <select name="intensity">${opt('auto', '依目標(標準)', p.intensity || 'aggressive')}${opt('aggressive', '偏激進(多低碳日)', p.intensity || 'aggressive')}${opt('gentle', '溫和(均衡循環)', p.intensity)}</select></label>
       </div>
       <div class="muted small" style="margin:-4px 2px 8px">碳循環:高碳日(訓練日)吃較多碳水並排重訓,低碳日減碳並休息或低強度有氧,週間輪替以加速減脂。</div>
+      <div class="muted small" style="margin:-4px 2px 8px">重點部位:訓練會明顯偏重該部位、飲食會針對水腫等因素調整。註:脂肪無法指定部位消除,緊實靠「全身減脂 + 該部位訓練 + 消水腫」三者並行。</div>
       <label class="field"><span>飲食限制/過敏(選填)</span><input name="restrictions" value="${esc(p.restrictions || '')}" placeholder="例:不吃牛、乳糖不耐"/></label>
       <label class="field"><span>口味偏好(選填)</span><input name="preferences" value="${esc(p.preferences || '')}" placeholder="例:愛吃辣、常吃超商"/></label>
       <label class="field"><span>可用運動器材(選填)</span><input name="equipment" value="${esc(p.equipment || '')}" placeholder="例:啞鈴一組、健身房會員、只能徒手"/></label>
@@ -862,6 +865,7 @@ function bindProfileForm(afterSave) {
       gender: p.gender, age: Number(p.age), heightCm: Number(p.heightCm), weightKg: Number(p.weightKg),
       targetWeightKg: p.targetWeightKg ? Number(p.targetWeightKg) : null,
       activity: p.activity, goal: p.goal, rate: p.rate, intensity: p.intensity || 'aggressive',
+      focusArea: p.focusArea || 'whole',
       restrictions: p.restrictions || '', preferences: p.preferences || '',
       equipment: p.equipment || '', scheduleNote: p.scheduleNote || '',
     };
@@ -956,6 +960,7 @@ function renderMe() {
       ${S.showProfileForm ? profileFormHTML(p) : `
         <div class="muted" style="font-size:14px">
           ${p.gender === 'male' ? '男' : '女'}・${p.age} 歲・${p.heightCm} cm・${p.weightKg} kg
+          ${p.focusArea && p.focusArea !== 'whole' ? `<br/>重點部位:${esc((FOCUS_AREAS[p.focusArea] || {}).label || p.focusArea)}` : ''}
           ${p.restrictions ? `<br/>限制:${esc(p.restrictions)}` : ''}
           ${p.preferences ? `<br/>偏好:${esc(p.preferences)}` : ''}
           ${p.equipment ? `<br/>器材:${esc(p.equipment)}` : ''}

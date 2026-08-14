@@ -1,5 +1,5 @@
 // Service Worker:快取 App 外殼,離線也能開(AI 功能需要網路)。
-const VER = 'slim-v10';
+const VER = 'slim-v11';
 const ASSETS = [
   './',
   './index.html',

@@ -2,8 +2,43 @@
 // 瀏覽器直接呼叫 API(CORS 由 anthropic-dangerous-direct-browser-access 允許),
 // API key 只存在本機 localStorage,不經過任何中介伺服器。
 
-import { ACTIVITY_LEVELS, GOALS, RATES, CARB_DAY_TYPES, targetsForDate, carbTypeForDate } from './nutrition.js';
+import { ACTIVITY_LEVELS, GOALS, RATES, FOCUS_AREAS, CARB_DAY_TYPES, targetsForDate, carbTypeForDate } from './nutrition.js';
 import { DB } from './store.js';
+
+// 重點雕塑部位 → 訓練與飲食方針。
+// 前提(務必誠實):脂肪無法指定部位消除,靠的是「全身減脂 + 該部位阻力訓練 + 減少水腫」。
+export const FOCUS_RULES = {
+  lower: {
+    training: '重訓以「臀腿」為主軸:深蹲、羅馬尼亞硬舉、臀推、分腿蹲/弓箭步、腿推、腿彎舉、髖外展、小腿。下半身訓練量明顯高於上半身,但上半身與核心每週仍各至少 1 次,維持體態平衡,不可完全不練。有氧優先選「會用到臀腿、又不易讓大腿變粗」的形式:坡度快走、爬階、腳踏車中低阻力、游泳;避免長時間高阻力衝刺型踩踏。',
+    diet: '下半身視覺很受「水腫」左右:控制鈉(醬料、湯麵湯底、加工肉、醃漬物、零食),多吃高鉀食物(香蕉、地瓜、菠菜、酪梨、番茄、豆類),水分要喝足(怕水腫而少喝反而更腫),纖維足量避免便祕腹脹。',
+    lifestyle: '久坐是下半身循環的大敵:每小時起身走動 2-3 分鐘、避免翹腳、晚上抬腿 10 分鐘,長時間坐著可考慮壓力襪。',
+  },
+  upper: {
+    training: '重訓以「背、肩、手臂」為主軸:划船、滑輪下拉/引體、肩推、側平舉、二頭彎舉、三頭下壓;搭配改善圓肩駝背的動作。下半身每週仍至少 1-2 次(深蹲或硬舉),維持全身代謝與力量基礎。',
+    diet: '蛋白質務必足量以支撐上半身肌肉生長;整體仍以熱量赤字帶動全身減脂。',
+    lifestyle: '注意辦公久坐造成的圓肩與上交叉症候群,每天做胸部與上背伸展。',
+  },
+  core: {
+    training: '核心以「抗動作」訓練為主:棒式、死蟲、鳥狗、側棒、抗旋轉(Pallof press),搭配呼吸與骨盆控制;仰臥起坐類捲腹不需過量。全身複合動作(深蹲、硬舉、農夫走路)本身就是很好的核心訓練,每週保留。',
+    diet: '腹部外觀受腹脹影響很大:注意易脹氣食物、進食速度、精緻糖與酒精;睡眠與壓力(皮質醇)也會影響腹部脂肪堆積。',
+    lifestyle: '腰圍變化通常最慢,請看長期趨勢而非單日;睡眠 7 小時以上對腹部脂肪特別關鍵。',
+  },
+};
+
+export function focusBlock() {
+  const key = DB.profile?.focusArea;
+  const rule = FOCUS_RULES[key];
+  if (!rule) return null;
+  const label = (FOCUS_AREAS[key] || {}).label || key;
+  return [
+    `【重點雕塑部位:${label}】這是學員特別在意的部位,規劃時要明顯偏重,但必須誠實:`,
+    '脂肪無法「指定部位」消除(局部減脂在生理上不成立),該部位變緊實靠的是「全身減脂 + 該部位阻力訓練 + 減少水腫」三者並行。',
+    '絕不可承諾「只瘦某個部位」或宣稱某個動作能消除該處脂肪;可以說明這樣做會讓該部位更緊實有線條。',
+    `· 訓練方針:${rule.training}`,
+    `· 飲食方針:${rule.diet}`,
+    `· 生活方針:${rule.lifestyle}`,
+  ].join('\n');
+}
 
 // 碳日 → 對應運動型別的方針(讓「當日飲食」決定「當日訓練」)。
 export const CARB_WORKOUT_RULE = {
@@ -172,6 +207,10 @@ export function personaPrompt(dateStr = null) {
   if (p.equipment) lines.push(`- 可用運動器材:${p.equipment}`);
   if (p.scheduleNote) lines.push(`- 作息備註:${p.scheduleNote}`);
 
+  // 重點雕塑部位方針
+  const fb = focusBlock();
+  if (fb) lines.push('', fb);
+
   // 碳循環方針
   if (cycle?.byType) {
     lines.push(
@@ -290,6 +329,10 @@ export function aiDayMeals({ date, note, recentMeals, usedNames, dayTarget = nul
     targetLine,
     carbGuide,
     '食譜要忙碌上班族做得出來(步驟≤4,或直接給超商/外食組合);每餐附一個 tip。',
+    (() => {
+      const rule = FOCUS_RULES[DB.profile?.focusArea];
+      return rule ? `另外配合學員的重點部位:${rule.diet}` : '';
+    })(),
     note ? `本週特別需求:${note}` : '',
     usedNames ? `本週其他天已安排(請避免重複):${usedNames}` : '',
     recentMeals ? `最近實際吃過(避免重複、貼近口味):${recentMeals}` : '',
@@ -322,6 +365,12 @@ export function aiDayWorkout({ date, note, weekSoFar, dayIndex, total, dayTarget
     `請為學員規劃 ${date}(${weekdayOf(date)})這「一天」的運動(這是本週第 ${dayIndex + 1}/${total} 天)。`,
     carbLine,
     dayTarget && weekSoFar ? `本週前面幾天已安排:${weekSoFar}。` : '',
+    (() => {
+      const key = DB.profile?.focusArea;
+      const rule = FOCUS_RULES[key];
+      if (!rule) return '';
+      return `這一天的動作選擇要明顯偏重「${(FOCUS_AREAS[key] || {}).label}」:${rule.training} 若當天是休息或低強度日,伸展與活動度也以該部位為主。`;
+    })(),
     '每個動作要有 howTo(2-3 句動作要領含常見錯誤);給 timing(建議時段與用餐搭配,呼應當日碳量:高碳日把碳水放訓練前後、低碳日可安排空腹或餐前低強度有氧);重訓 4-6 個動作標組數次數,有氧標強度與時間;休息日給 1-2 個輕鬆伸展即可。',
     note ? `本週特別需求:${note}` : '',
     '',

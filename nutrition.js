@@ -16,6 +16,15 @@ export const GOALS = {
   maintain: { label: '維持', sign: 0 },
 };
 
+// 重點雕塑部位。注意:脂肪無法「指定部位」消除,局部減脂在生理上不成立;
+// 能做的是「全身減脂 + 該部位阻力訓練塑形 + 減少水腫」三管齊下。
+export const FOCUS_AREAS = {
+  whole: { label: '全身均衡' },
+  lower: { label: '下半身(臀腿)' },
+  upper: { label: '上半身(背肩手臂)' },
+  core: { label: '核心 / 腹部' },
+};
+
 // 每週體重變化速率(公斤)→ 每日熱量增減。1 kg 脂肪 ≈ 7700 kcal。
 export const RATES = {
   slow: { label: '和緩(每週 0.25 kg)', kgPerWeek: 0.25 },
