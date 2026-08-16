@@ -222,6 +222,7 @@ label.field > span { display: block; margin-bottom: 5px; }
 .badge.cardio { background: var(--accent-soft); color: #c2570e; }
 .badge.mixed { background: #dbeafe; color: #1d4ed8; }
 .badge.rest { background: var(--border); color: var(--muted); }
+.badge.carb-steady { background: #e0f2fe; color: #0369a1; }
 .badge.carb-high { background: #ffe4d6; color: #c2410c; }
 .badge.carb-mid { background: #fef3c7; color: #b45309; }
 .badge.carb-low { background: #dcfce7; color: #15803d; }
@@ -229,6 +230,7 @@ label.field > span { display: block; margin-bottom: 5px; }
   .badge.strength { background: #2e2352; color: #c4b5fd; }
   .badge.cardio { background: #3a2818; color: #fdba74; }
   .badge.mixed { background: #172a54; color: #93c5fd; }
+  .badge.carb-steady { background: #12344a; color: #7dd3fc; }
   .badge.carb-high { background: #4a2413; color: #fdba74; }
   .badge.carb-mid { background: #3f3016; color: #fcd34d; }
   .badge.carb-low { background: #14331f; color: #86efac; }

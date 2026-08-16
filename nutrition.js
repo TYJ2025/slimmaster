@@ -21,6 +21,7 @@ export const GOALS = {
 export const FOCUS_AREAS = {
   whole: { label: '全身均衡' },
   lower: { label: '下半身(臀腿)' },
+  shape: { label: '瘦腿＋胸背維持' },
   upper: { label: '上半身(背肩手臂)' },
   core: { label: '核心 / 腹部' },
 };
@@ -44,6 +45,13 @@ export function calcBMR({ gender, weightKg, heightCm, age }) {
 // 三種碳日:高碳日(訓練日,大肌群重訓)、中碳日(中強度/有氧)、低碳日(休息或低強度有氧)。
 // 蛋白質全週固定,碳水依碳日高低循環,脂肪與碳水反向(碳水低則脂肪略高)。
 export const CARB_DAY_TYPES = {
+  steady: {
+    key: 'steady', label: '均衡減脂日', emoji: '⚖️',
+    calFactor: 0.85,
+    fatPerKg: 0.8,
+    workout: 'mixed',
+    desc: '每日營養穩定，以溫和熱量赤字配合每週訓練，不做高低碳擺盪',
+  },
   high: {
     key: 'high', label: '高碳日', emoji: '🍚',
     calFactor: 1.10,   // 相對 TDEE 的熱量比例
@@ -75,6 +83,12 @@ const PROTEIN_PER_KG = { lose: 2.0, recomp: 1.9, gain: 1.8, maintain: 1.6 };
 
 // 每週碳日樣式(索引 0 = 週一 … 6 = 週日)。強度越激進,低碳日越多、擺盪越大。
 export const CARB_PATTERNS = {
+  steady: {
+    lose:     ['steady', 'steady', 'steady', 'steady', 'steady', 'steady', 'steady'],
+    recomp:   ['steady', 'steady', 'steady', 'steady', 'steady', 'steady', 'steady'],
+    gain:     ['steady', 'steady', 'steady', 'steady', 'steady', 'steady', 'steady'],
+    maintain: ['steady', 'steady', 'steady', 'steady', 'steady', 'steady', 'steady'],
+  },
   aggressive: {
     lose:     ['high', 'low', 'low', 'mid', 'low', 'high', 'low'],   // 2 高 / 1 中 / 4 低
     recomp:   ['high', 'low', 'low', 'mid', 'high', 'low', 'low'],   // 2 高 / 1 中 / 4 低
@@ -96,6 +110,7 @@ export const CARB_PATTERNS = {
 };
 
 export const INTENSITIES = {
+  steady: { label: '均衡減脂(推薦)', pattern: 'steady' },
   auto: { label: '依目標(標準)', pattern: 'balanced' },
   aggressive: { label: '偏激進(多低碳日)', pattern: 'aggressive' },
   gentle: { label: '溫和(均衡循環)', pattern: 'gentle' },
@@ -122,7 +137,8 @@ function dayTargetForType(typeKey, { tdee, gender, weightKg, goal }) {
   const proteinG = Math.round(weightKg * (PROTEIN_PER_KG[goal] ?? 1.8));
   const fatG = Math.round(weightKg * def.fatPerKg);
 
-  let calorieTarget = Math.round(tdee * (def.calFactor + shift));
+  const steadyFactor = { lose: 0.85, recomp: 0.95, gain: 1.08, maintain: 1.0 }[goal] ?? 1.0;
+  let calorieTarget = Math.round(tdee * (typeKey === 'steady' ? steadyFactor : def.calFactor + shift));
   if (calorieTarget < floor) calorieTarget = floor;
 
   // 碳水吃掉剩餘熱量,低碳日設地板避免歸零。
@@ -157,7 +173,7 @@ export function calcCarbCycle(profile) {
     || CARB_PATTERNS.balanced.maintain;
 
   const byType = {};
-  for (const key of ['high', 'mid', 'low']) {
+  for (const key of ['steady', 'high', 'mid', 'low']) {
     byType[key] = dayTargetForType(key, { tdee, gender, weightKg, goal });
   }
 

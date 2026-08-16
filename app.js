@@ -42,6 +42,18 @@ function carbBadge(type) {
 function cycleOverviewHTML(targets) {
   const cyc = targets?.cycle;
   if (!cyc?.byType) return '';
+  if (cyc.patternKey === 'steady') {
+    const d = cyc.byType.steady;
+    return `
+      <div class="card">
+        <h2>均衡減脂設定 <span class="muted small">(推薦)</span></h2>
+        <div class="carb-row">
+          ${carbBadge('steady')}
+          <span class="muted small" style="margin-left:auto">${d.calorieTarget} kcal・蛋白 ${d.macros.proteinG} / 碳 ${d.macros.carbG} / 脂 ${d.macros.fatG} g</span>
+        </div>
+        <div class="muted small" style="margin-top:8px">每天採相同的溫和目標，不做激進高低碳擺盪；訓練依恢復與週計畫安排。胸部脂肪仍可能隨減脂改變，胸背訓練主要改善支撐與姿勢。</div>
+      </div>`;
+  }
   const typeRows = ['high', 'mid', 'low'].map((k) => {
     const d = cyc.byType[k];
     return `<div class="carb-row">
@@ -842,12 +854,12 @@ function profileFormHTML(p = {}) {
         <label class="field"><span>速度</span>
           <select name="rate">${opt('slow', '和緩(週 0.25kg)', p.rate)}${opt('moderate', '標準(週 0.5kg)', p.rate || 'moderate')}${opt('fast', '積極(週 0.75kg)', p.rate)}</select></label>
         <label class="field"><span>重點雕塑部位</span>
-          <select name="focusArea">${opt('whole', '全身均衡', p.focusArea || 'whole')}${opt('lower', '下半身(臀腿)', p.focusArea)}${opt('upper', '上半身(背肩手臂)', p.focusArea)}${opt('core', '核心 / 腹部', p.focusArea)}</select></label>
-        <label class="field"><span>碳循環強度</span>
-          <select name="intensity">${opt('auto', '依目標(標準)', p.intensity || 'aggressive')}${opt('aggressive', '偏激進(多低碳日)', p.intensity || 'aggressive')}${opt('gentle', '溫和(均衡循環)', p.intensity)}</select></label>
+          <select name="focusArea">${opt('whole', '全身均衡', p.focusArea || 'shape')}${opt('shape', '瘦腿＋胸背維持', p.focusArea || 'shape')}${opt('lower', '下半身(臀腿)', p.focusArea)}${opt('upper', '上半身(背肩手臂)', p.focusArea)}${opt('core', '核心 / 腹部', p.focusArea)}</select></label>
+        <label class="field"><span>飲食策略</span>
+          <select name="intensity">${opt('steady', '均衡減脂(推薦)', p.intensity || 'steady')}${opt('auto', '碳循環・標準', p.intensity)}${opt('aggressive', '碳循環・偏激進', p.intensity)}${opt('gentle', '碳循環・溫和', p.intensity)}</select></label>
       </div>
-      <div class="muted small" style="margin:-4px 2px 8px">碳循環:高碳日(訓練日)吃較多碳水並排重訓,低碳日減碳並休息或低強度有氧,週間輪替以加速減脂。</div>
-      <div class="muted small" style="margin:-4px 2px 8px">重點部位:訓練會明顯偏重該部位、飲食會針對水腫等因素調整。註:脂肪無法指定部位消除,緊實靠「全身減脂 + 該部位訓練 + 消水腫」三者並行。</div>
+      <div class="muted small" style="margin:-4px 2px 8px">均衡減脂:每日維持約 15% 的溫和熱量赤字與穩定蛋白質，不必靠高低碳日控制訓練。</div>
+      <div class="muted small" style="margin:-4px 2px 8px">重點部位:脂肪無法指定部位消除；胸部也可能隨全身減脂改變。胸背訓練改善的是胸肌支撐與姿勢，不保證乳房脂肪不減少。</div>
       <label class="field"><span>飲食限制/過敏(選填)</span><input name="restrictions" value="${esc(p.restrictions || '')}" placeholder="例:不吃牛、乳糖不耐"/></label>
       <label class="field"><span>口味偏好(選填)</span><input name="preferences" value="${esc(p.preferences || '')}" placeholder="例:愛吃辣、常吃超商"/></label>
       <label class="field"><span>可用運動器材(選填)</span><input name="equipment" value="${esc(p.equipment || '')}" placeholder="例:啞鈴一組、健身房會員、只能徒手"/></label>
@@ -864,7 +876,7 @@ function bindProfileForm(afterSave) {
     const profile = {
       gender: p.gender, age: Number(p.age), heightCm: Number(p.heightCm), weightKg: Number(p.weightKg),
       targetWeightKg: p.targetWeightKg ? Number(p.targetWeightKg) : null,
-      activity: p.activity, goal: p.goal, rate: p.rate, intensity: p.intensity || 'aggressive',
+      activity: p.activity, goal: p.goal, rate: p.rate, intensity: p.intensity || 'steady',
       focusArea: p.focusArea || 'whole',
       restrictions: p.restrictions || '', preferences: p.preferences || '',
       equipment: p.equipment || '', scheduleNote: p.scheduleNote || '',
@@ -891,6 +903,7 @@ function downloadBlob(blob, filename) {
 function renderMe() {
   const p = DB.profile || {};
   const t = DB.targets || {};
+  const isSteady = t.cycle?.patternKey === 'steady';
   const weights = DB.weights || [];
   const stats = storageStats();
   app.innerHTML = `
@@ -898,9 +911,9 @@ function renderMe() {
       <div class="brand">👤 我的<small>目標、進度與設定</small></div>
     </div>
     <div class="card">
-      <h2>每日目標 <span class="muted small">(碳循環週均)</span></h2>
+      <h2>每日目標 <span class="muted small">(${isSteady ? '每日均衡' : '碳循環週均'})</span></h2>
       <div class="stat-grid">
-        <div class="stat"><div class="v">${t.calorieTarget || '—'}</div><div class="l">週均熱量 kcal</div></div>
+        <div class="stat"><div class="v">${t.calorieTarget || '—'}</div><div class="l">${isSteady ? '每日熱量' : '週均熱量'} kcal</div></div>
         <div class="stat"><div class="v">${t.macros?.proteinG || '—'} g</div><div class="l">蛋白質目標</div></div>
         <div class="stat"><div class="v">${t.tdee || '—'}</div><div class="l">TDEE kcal</div></div>
         <div class="stat"><div class="v">${t.bmr || '—'}</div><div class="l">BMR kcal</div></div>
@@ -961,6 +974,7 @@ function renderMe() {
         <div class="muted" style="font-size:14px">
           ${p.gender === 'male' ? '男' : '女'}・${p.age} 歲・${p.heightCm} cm・${p.weightKg} kg
           ${p.focusArea && p.focusArea !== 'whole' ? `<br/>重點部位:${esc((FOCUS_AREAS[p.focusArea] || {}).label || p.focusArea)}` : ''}
+          <br/>飲食策略:${esc((INTENSITIES[p.intensity] || INTENSITIES.steady).label)}
           ${p.restrictions ? `<br/>限制:${esc(p.restrictions)}` : ''}
           ${p.preferences ? `<br/>偏好:${esc(p.preferences)}` : ''}
           ${p.equipment ? `<br/>器材:${esc(p.equipment)}` : ''}
@@ -1083,9 +1097,9 @@ $$('#tabbar button').forEach((b) => (b.onclick = () => switchTab(b.dataset.tab))
 // ================= 啟動 =================
 (function boot() {
   let dirty = false;
-  // 遷移:舊資料補上碳循環設定(intensity 預設偏激進),讓既有使用者自動升級。
+  // 遷移:舊資料補上飲食策略；新使用者預設採每日均衡的溫和減脂。
   if (DB.profile && (!DB.targets || !DB.targets.cycle)) {
-    if (!DB.profile.intensity) DB.profile.intensity = 'aggressive';
+    if (!DB.profile.intensity) DB.profile.intensity = 'steady';
     DB.targets = calcTargets(DB.profile);
     dirty = true;
   }

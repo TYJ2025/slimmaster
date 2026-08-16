@@ -1,16 +1,21 @@
-// 免 API 預排：2026/8/15～8/30(下半身雕塑版)。
-// 依使用者既有的高／中／低碳目標分配三餐；五、六、日保留飲酒彈性；
-// 訓練以臀腿為主軸(每週 2 次下肢重訓)，並在飲食與生活面加入消水腫策略。
-// 註：脂肪無法指定部位消除，下半身緊實靠「全身減脂＋臀腿訓練＋減少水腫」三者並行。
+// 免 API 預排：2026/8/15～8/30(瘦腿＋胸背維持版)。
+// 採每日均衡、溫和熱量赤字，不做激進碳循環；五、六、日保留飲酒彈性但不從正餐硬扣熱量。
+// 訓練以每日開髖、每週 2 次臀腿重訓、1 次完整胸背與 1 次輕量胸背／姿勢練習為主軸。
+// 註：脂肪無法指定部位消除，胸背訓練改善支撐與姿勢，但不能保證乳房脂肪在減脂時不變。
 
-const MEAL_PRESET_ID = 'lower-body-2026-08-15-v1';
-const HIP_WORKOUT_PRESET_ID = 'hip-opening-2026-08-15-v2';
+import { calcTargets } from './nutrition.js';
+
+const STRATEGY_PRESET_ID = 'steady-shape-strategy-2026-08-v1';
+const MEAL_PRESET_ID = 'steady-shape-meals-2026-08-15-v3';
+const WORKOUT_PRESET_ID = 'steady-shape-workouts-2026-08-15-v3';
+const PLAN_DAY_TYPE = 'steady';
 const SAFE_FLOOR = { male: 1500, female: 1200 };
 // 兩杯 highball：每杯暫按 45 ml、40% 威士忌＋無糖氣泡水估算，約 200 kcal。
 const ALCOHOL_RESERVE_KCAL = 200;
 const MEAL_RATIOS = [0.28, 0.37, 0.35];
 
 const FALLBACK_TARGETS = {
+  steady: { type: 'steady', calorieTarget: 1500, macros: { proteinG: 110, carbG: 140, fatG: 55 } },
   high: { type: 'high', calorieTarget: 1800, macros: { proteinG: 110, carbG: 240, fatG: 44 } },
   mid:  { type: 'mid',  calorieTarget: 1600, macros: { proteinG: 110, carbG: 160, fatG: 58 } },
   low:  { type: 'low',  calorieTarget: 1400, macros: { proteinG: 110, carbG: 70,  fatG: 76 } },
@@ -61,18 +66,18 @@ const DAYS = [
   {
     date: '2026-08-15', carbDay: 'low', drinking: true,
     meals: [
-      ['酪梨莓果優格碗', 'yogurtBoost', 'berries', '酪梨薄片與肉桂粉', '酪梨與莓果補鉀,有助改善下半身水腫。'],
-      ['蒜香蝦仁南瓜沙拉', 'shrimp', 'pumpkin', '菠菜、番茄與洋蔥', '沙拉醬自調(檸檬＋橄欖油),市售醬料鈉含量高。'],
-      ['飲酒前豆腐蔬菜鍋', 'tofu', 'pumpkin', '白菜、金針菇與海帶芽', '湯只喝一半以控鈉;先吃完正餐再飲酒。'],
+      ['酪梨莓果燕麥優格碗', 'yogurtBoost', 'oats', '酪梨薄片、莓果與肉桂粉', '均衡吃早餐，不為晚間飲酒省掉正餐。'],
+      ['蒜香蝦仁地瓜沙拉', 'shrimp', 'sweetPotato', '菠菜、番茄與洋蔥', '沙拉醬自調(檸檬＋橄欖油),市售醬料鈉含量高。'],
+      ['飲酒前豆腐糙米蔬菜鍋', 'tofu', 'brownRice', '白菜、金針菇與海帶芽', '湯只喝一半以控鈉;先吃完正餐再飲酒。'],
     ],
     workout: 'restGluteWalk',
   },
   {
     date: '2026-08-16', carbDay: 'low', drinking: true,
     meals: [
-      ['菠菜番茄烘蛋', 'eggPlus', 'pumpkin', '菠菜、小番茄與黑胡椒', '菠菜高鉀低鈉,是消水腫的好食材。'],
-      ['檸香鮭魚彩蔬盤', 'salmon', 'pumpkin', '蘆筍、彩椒與洋蔥', '鮭魚本身有油脂,烹調不必再加多油。'],
-      ['飲酒前清蒸鱸魚', 'whiteFish', 'pumpkin', '青江菜、菇類與薑絲', '清蒸最能控鈉;飲酒時一杯酒配一杯水。'],
+      ['菠菜番茄烘蛋吐司', 'eggPlus', 'toast', '菠菜、小番茄與黑胡椒', '菠菜高鉀低鈉,搭配全麥吐司維持穩定飲食。'],
+      ['檸香鮭魚地瓜彩蔬盤', 'salmon', 'sweetPotato', '蘆筍、彩椒與洋蔥', '鮭魚本身有油脂,烹調不必再加多油。'],
+      ['飲酒前清蒸鱸魚藜麥餐', 'whiteFish', 'quinoa', '青江菜、菇類與薑絲', '清蒸最能控鈉;飲酒時一杯酒配一杯水。'],
     ],
     workout: 'recovery',
   },
@@ -81,9 +86,9 @@ const DAYS = [
   {
     date: '2026-08-17', carbDay: 'low',
     meals: [
-      ['無糖優格奇亞籽碗', 'yogurtBoost', 'berries', '奇亞籽與肉桂粉', '週一先補水、降鈉,把週末的水腫代謝掉。'],
-      ['檸檬雞胸酪梨沙拉', 'chicken', 'pumpkin', '生菜、小黃瓜與酪梨', '酪梨補鉀;醬汁只用檸檬與黑胡椒。'],
-      ['味噌豆腐菇菇湯', 'tofu', 'pumpkin', '白菜、鴻喜菇與海帶芽', '味噌減半,湯不喝完,今天以低鈉為目標。'],
+      ['無糖燕麥優格奇亞籽碗', 'yogurtBoost', 'oats', '奇亞籽、莓果與肉桂粉', '週一先補水、降鈉,但不需刻意低碳。'],
+      ['檸檬雞胸地瓜酪梨沙拉', 'chicken', 'sweetPotato', '生菜、小黃瓜與酪梨', '酪梨補鉀;醬汁只用檸檬與黑胡椒。'],
+      ['味噌豆腐糙米菇菇湯', 'tofu', 'brownRice', '白菜、鴻喜菇與海帶芽', '味噌減半,湯不喝完,今天以低鈉為目標。'],
     ],
     workout: 'recoveryGlute',
   },
@@ -109,7 +114,7 @@ const DAYS = [
     date: '2026-08-20', carbDay: 'high',
     meals: [
       ['香蕉可可燕麥杯', 'yogurt', 'oats', '香蕉半根與無糖可可粉', '香蕉補鉀又補碳水,訓練日早餐很適合。'],
-      ['黑胡椒豬里肌糙米碗', 'pork', 'brownRice', '青花菜與紅蘿蔔', '黑胡椒調味取代醬油;高碳日飯量較多是為晚上重訓補肝醣。'],
+      ['黑胡椒豬里肌糙米碗', 'pork', 'brownRice', '青花菜與紅蘿蔔', '黑胡椒調味取代醬油;訓練前正常吃澱粉即可。'],
       ['訓練後蒜香蝦仁烏龍', 'shrimp', 'udon', '高麗菜、菇類與蔥段', '訓練後補碳水;湯不要喝完以免鈉超標。'],
     ],
     workout: 'lowerB',
@@ -126,18 +131,18 @@ const DAYS = [
   {
     date: '2026-08-22', carbDay: 'low', drinking: true,
     meals: [
-      ['希臘優格堅果莓果碗', 'yogurtBoost', 'berries', '肉桂粉與少量堅果', '堅果選無調味,鹽味堅果會讓水腫更明顯。'],
-      ['檸檬鮭魚蘆筍盤', 'salmon', 'pumpkin', '蘆筍、菇類與洋蔥', '蘆筍利水,搭配充足水分效果更好。'],
-      ['飲酒前蝦仁蔬菜鍋', 'shrimp', 'pumpkin', '白菜、金針菇與海帶芽', '不加加工丸餃(鈉極高);酒後不吃宵夜。'],
+      ['希臘優格堅果燕麥碗', 'yogurtBoost', 'oats', '莓果、肉桂粉與少量堅果', '堅果選無調味,鹽味堅果會讓水腫更明顯。'],
+      ['檸檬鮭魚地瓜蘆筍盤', 'salmon', 'sweetPotato', '蘆筍、菇類與洋蔥', '正常吃足正餐,不要為晚上喝酒挨餓。'],
+      ['飲酒前蝦仁藜麥蔬菜鍋', 'shrimp', 'quinoa', '白菜、金針菇與海帶芽', '不加加工丸餃;酒後不吃宵夜。'],
     ],
     workout: 'restGluteWalk',
   },
   {
     date: '2026-08-23', carbDay: 'low', drinking: true,
     meals: [
-      ['番茄鮪魚生菜盤', 'tuna', 'pumpkin', '生菜、番茄與小黃瓜', '鮪魚罐頭選水煮並瀝乾,可再沖一下水降鈉。'],
-      ['蒜香豬里肌時蔬', 'pork', 'pumpkin', '高麗菜與青花菜', '清蒸或乾煎,不搭配濃醬與勾芡。'],
-      ['飲酒前薑絲魚湯', 'whiteFish', 'pumpkin', '白菜、菇類與薑絲', '若週五六已喝較多,今晚改無酒精飲料。'],
+      ['番茄鮪魚全麥吐司', 'tuna', 'toast', '生菜、番茄與小黃瓜', '鮪魚罐頭選水煮並瀝乾,可再沖一下水降鈉。'],
+      ['蒜香豬里肌地瓜時蔬', 'pork', 'sweetPotato', '高麗菜與青花菜', '清蒸或乾煎,不搭配濃醬與勾芡。'],
+      ['飲酒前薑絲魚糙米湯', 'whiteFish', 'brownRice', '白菜、菇類與薑絲', '若週五六已喝較多,今晚改無酒精飲料。'],
     ],
     workout: 'recovery',
   },
@@ -146,9 +151,9 @@ const DAYS = [
   {
     date: '2026-08-24', carbDay: 'low',
     meals: [
-      ['無糖優格酪梨碗', 'yogurtBoost', 'berries', '酪梨與奇亞籽', '週一是消水腫關鍵日:低鈉、高鉀、水喝足。'],
-      ['蝦仁酪梨沙拉', 'shrimp', 'pumpkin', '生菜、番茄與酪梨', '蝦仁低脂高蛋白,適合低碳日的午餐。'],
-      ['豆腐蔬菜味噌鍋', 'tofu', 'pumpkin', '白菜、菇類與海帶芽', '味噌減半;晚餐後抬腿 10 分鐘幫助循環。'],
+      ['無糖燕麥優格酪梨碗', 'yogurtBoost', 'oats', '酪梨、莓果與奇亞籽', '週一維持低鈉、高鉀並喝足水。'],
+      ['蝦仁藜麥酪梨沙拉', 'shrimp', 'quinoa', '生菜、番茄與酪梨', '蝦仁低脂高蛋白,搭配適量全穀澱粉。'],
+      ['豆腐地瓜蔬菜味噌鍋', 'tofu', 'sweetPotato', '白菜、菇類與海帶芽', '味噌減半;晚餐後抬腿 10 分鐘幫助循環。'],
     ],
     workout: 'recoveryGlute',
   },
@@ -191,24 +196,24 @@ const DAYS = [
   {
     date: '2026-08-29', carbDay: 'low', drinking: true,
     meals: [
-      ['莓果優格蛋白碗', 'yogurtBoost', 'berries', '肉桂粉與奇亞籽', '奇亞籽補纖維,避免便祕造成腹脹。'],
-      ['檸香鮭魚彩蔬盤', 'salmon', 'pumpkin', '蘆筍、彩椒與洋蔥', '用檸檬與香草調味,鹽只放一點點。'],
-      ['飲酒前豆腐菇菇鍋', 'tofu', 'pumpkin', '白菜、菇類與海帶芽', '湯只喝一半;酒後只休息,不做訓練。'],
+      ['莓果燕麥優格蛋白碗', 'yogurtBoost', 'oats', '肉桂粉與奇亞籽', '奇亞籽補纖維,避免便祕造成腹脹。'],
+      ['檸香鮭魚地瓜彩蔬盤', 'salmon', 'sweetPotato', '蘆筍、彩椒與洋蔥', '用檸檬與香草調味,鹽只放一點點。'],
+      ['飲酒前豆腐藜麥菇菇鍋', 'tofu', 'quinoa', '白菜、菇類與海帶芽', '湯只喝一半;酒後只休息,不做訓練。'],
     ],
     workout: 'restGluteWalk',
   },
   {
     date: '2026-08-30', carbDay: 'low', drinking: true,
     meals: [
-      ['番茄蝦仁溫沙拉', 'shrimp', 'pumpkin', '生菜、番茄與小黃瓜', '起床先喝一大杯水再吃早餐。'],
-      ['蒜香豬里肌蔬菜盤', 'pork', 'pumpkin', '高麗菜與青花菜', '氣炸或乾煎,避免裹粉與濃醬。'],
-      ['飲酒前薑絲鱸魚湯', 'whiteFish', 'pumpkin', '白菜、菇類與薑絲', '這是本段最後一天,明天起可請教練排新一週。'],
+      ['番茄蝦仁全麥吐司', 'shrimp', 'toast', '生菜、番茄與小黃瓜', '起床先喝一大杯水再吃早餐。'],
+      ['蒜香豬里肌糙米蔬菜盤', 'pork', 'brownRice', '高麗菜與青花菜', '氣炸或乾煎,避免裹粉與濃醬。'],
+      ['飲酒前薑絲鱸魚地瓜湯', 'whiteFish', 'sweetPotato', '白菜、菇類與薑絲', '這是本段最後一天,明天起可請教練排新一週。'],
     ],
     workout: 'recovery',
   },
 ];
 
-// 每天固定做同一套低強度髖部活動與臀腿啟動；主訓練強度才隨碳日調整。
+// 每天固定做同一套低強度髖部活動與臀腿啟動；主訓練依週計畫與恢復調整。
 const DAILY_HIP_ROUTINE = [
   ['每日開髖｜90/90 髖轉換', '2 組 x 每側 8 下', '坐直後讓雙膝左右緩慢倒向地面，維持腳掌位置並用髖部帶動；不要為了碰地而扭腰或彈震。', '髖關節活動度'],
   ['每日開髖｜內收肌後坐', '2 組 x 每側 8 下', '四足跪姿將一腿向側邊伸直，臀部緩慢向後坐再回來；背部保持自然，只做到大腿內側有輕微拉感。', '大腿內側、髖部'],
@@ -233,7 +238,7 @@ const WORKOUTS = {
   // ── 下半身重點:後鏈/髖鉸鏈主導(第一週) ──
   lowerB: {
     type: 'strength', focus: '下半身重訓 B・後鏈與單腳穩定', duration: '約 45 分鐘',
-    timing: '建議傍晚訓練;高碳日把主要澱粉放在訓練前後兩餐。',
+    timing: '建議傍晚訓練;正常吃三餐,把其中一部分全穀澱粉放在訓練前後即可。',
     items: [
       ['壺鈴羅馬尼亞硬舉(10 kg)', '4 組 x 10–12 下', '髖部向後推、壺鈴貼著大腿下滑,感覺腿後側被拉長;背要保持自然,不是蹲下去。', '腿後側、臀大肌'],
       ['單腳羅馬尼亞硬舉(手持 5 kg 啞鈴)', '3 組 x 每側 8–10 下', '支撐腳微彎、骨盆保持水平不外翻,可扶牆維持平衡;動作慢比重量重要。', '腿後側、臀中肌'],
@@ -265,26 +270,27 @@ const WORKOUTS = {
       ['雙手農夫走路(10 kg 壺鈴＋5 kg 啞鈴)', '3 組 x 45 秒', '肩胛穩定、腹部收好、小步走;不要駝背或聳肩。', '核心、握力、全身'],
     ],
   },
-  // ── 維持全身平衡:上肢＋核心(每週 1 次) ──
+  // ── 胸背與姿勢:改善胸肌支撐與上半身線條(不承諾乳房脂肪不變) ──
   upperCore: {
-    type: 'strength', focus: '上肢與核心(維持全身平衡)', duration: '約 40 分鐘',
-    timing: '傍晚訓練;下半身今天休息,讓臀腿為明後天的重訓恢復。',
+    type: 'strength', focus: '胸背與姿勢重訓・維持胸部視覺支撐', duration: '約 40–45 分鐘',
+    timing: '傍晚訓練;下半身今天休息。訓練後正常吃含蛋白質的晚餐,不需額外節食。',
     items: [
-      ['單手壺鈴划船(10 kg)', '4 組 x 每側 10 下', '背部保持平直、把手肘拉向髖部並停一秒;不要用身體扭轉甩動。', '背肌、二頭肌'],
-      ['啞鈴地板臥推(5 kg x 2)', '3 組 x 10–12 下', '仰躺、手肘約向下 45 度;推起時手腕保持直,不要聳肩。', '胸、肩、三頭肌'],
-      ['啞鈴肩上推舉(5 kg x 2)', '3 組 x 10 下', '肋骨收好再向上推,避免過度拱腰;無法控制就改單手輪流。', '肩、三頭肌'],
-      ['前臂棒式', '3 組 x 30–40 秒', '夾臀收腹,頭到腳跟一直線;腰一下沉就立刻休息。', '核心'],
-      ['死蟲式', '3 組 x 每側 8 下', '腰背貼地、對側手腳慢慢伸直;腰拱起就縮小幅度。', '深層核心'],
+      ['啞鈴地板臥推(5 kg x 2)', '4 組 x 8–12 下', '仰躺、手肘約向下 45 度,推起時手腕保持直;肩胛貼地,不要聳肩或撞擊啞鈴。', '胸肌、肩、三頭肌'],
+      ['單手壺鈴划船(10 kg)', '4 組 x 每側 10 下', '背部保持平直,把手肘拉向髖部並停一秒;不要用身體扭轉甩動。', '背肌、二頭肌'],
+      ['桌邊斜板伏地挺身', '3 組 x 8–12 下', '雙手扶穩桌緣,身體維持一直線後讓胸口靠近桌面再推回;不要塌腰或聳肩。桌子必須穩固不滑動。', '胸肌、三頭肌、核心'],
+      ['單顆啞鈴仰躺上拉(5 kg)', '3 組 x 10–12 下', '雙手托住一顆啞鈴在胸口上方,手肘微彎向頭後下降再拉回;只到肩膀舒服的角度,不要拱腰。', '胸肌、闊背肌、前鋸肌'],
+      ['俯臥 W 夾背(徒手)', '3 組 x 10 下', '俯臥或髖鉸鏈前傾,手臂呈 W 並把肩胛骨向後下夾;不要抬頭或聳肩。', '上背、後肩、姿勢肌群'],
     ],
   },
-  // ── 飲酒日前:爬坡快走(12-3-30 風格,練臀腿又不易讓大腿變粗) ──
+  // ── 飲酒日前:有氧＋本週第二次輕量胸背／姿勢刺激 ──
   inclineWalk: {
-    type: 'cardio', focus: '跑步機爬坡快走(12-3-30 風格)', duration: '約 40 分鐘',
+    type: 'mixed', focus: '跑步機爬坡快走＋輕量胸背姿勢', duration: '約 45 分鐘',
     timing: '下午或晚餐前完成;飲酒後不再運動,也不要駕車。',
     items: [
-      ['跑步機爬坡快走', '30 分鐘・坡度 10–12%・時速 4.8–5.0 km/h', '身體站直、核心收好,讓臀部發力向前推;不要抓著扶手把體重撐掉,那會讓效果大打折扣。', '臀大肌、腿後側、心肺'],
+      ['跑步機爬坡快走', '25–30 分鐘・坡度 6–10%・能說完整句子', '身體站直、核心收好,讓臀部發力向前推;不要全程抓扶手。若小腿或膝蓋不適就降低坡度。', '臀大肌、腿後側、心肺'],
+      ['桌邊斜板伏地挺身(輕量)', '2 組 x 10–12 下', '選穩固桌面,身體保持一直線後讓胸口靠近桌面再推回;保留 3–4 下餘力,不要做到力竭。', '胸肌、三頭肌、核心'],
+      ['牆天使', '2 組 x 8–10 下', '背靠牆,肋骨收好,手臂貼牆緩慢上下滑動;若肩膀卡住就縮小範圍。', '上背、後肩、姿勢肌群'],
       ['臀部與梨狀肌伸展', '每側 30 秒 x 2', '坐姿把腳踝放到對側膝上、背打直前傾;不要圓背硬壓。', '臀部、髖外側'],
-      ['小腿與腿後側伸展', '每側 30 秒 x 2', '後腳跟踩地、腳尖朝前;不要彈震拉伸。', '小腿、腿後側'],
     ],
   },
   // ── 飲酒日:休息＋散步＋抬腿消水腫 ──
@@ -406,9 +412,12 @@ function splitTotal(total) {
 }
 
 function plannedTarget(db, carbDay, drinking) {
-  const raw = db.targets?.cycle?.byType?.[carbDay] || FALLBACK_TARGETS[carbDay];
+  const raw = db.targets?.cycle?.byType?.[carbDay] || FALLBACK_TARGETS[carbDay] || FALLBACK_TARGETS.steady;
   const floor = SAFE_FLOOR[db.profile?.gender] || 1200;
-  const reserve = drinking ? Math.min(ALCOHOL_RESERVE_KCAL, Math.max(0, raw.calorieTarget - floor)) : 0;
+  // 均衡減脂版不靠少吃正餐補償酒精；酒精以額外熱量呈現。
+  const reserve = drinking && carbDay !== 'steady'
+    ? Math.min(ALCOHOL_RESERVE_KCAL, Math.max(0, raw.calorieTarget - floor))
+    : 0;
   const carbCut = carbDay === 'low' ? 0 : reserve * 0.4 / 4;
   const fatCut = (reserve - carbCut * 4) / 9;
   return {
@@ -450,7 +459,7 @@ function buildMeal(spec, macro, drinking) {
       ingredients.push(`橄欖油約 ${roundTo(oilTeaspoons, 0.5)} 茶匙`);
     }
   }
-  const alcoholTip = drinking ? '本日酒精額度另計；不要空腹喝，超過預留量需再調整。' : '';
+  const alcoholTip = drinking ? '酒精熱量另計；不要空腹喝，也不要靠少吃正餐補償。' : '';
   const proteinStep = protein.step ? protein.step : protein.ready
     ? (protein.sweet
         ? `${protein.label}與${carb.label}拌勻，冷藏或直接食用。`
@@ -476,19 +485,21 @@ function buildMeal(spec, macro, drinking) {
 }
 
 function buildMealDay(db, spec) {
-  const target = plannedTarget(db, spec.carbDay, spec.drinking);
+  const target = plannedTarget(db, PLAN_DAY_TYPE, spec.drinking);
   const p = splitTotal(target.protein);
   const c = splitTotal(target.carb);
   const f = splitTotal(target.fat);
   const meals = spec.meals.map((meal, i) => buildMeal(meal, { p: p[i], c: c[i], f: f[i] }, spec.drinking));
   const alcoholNote = spec.drinking
-    ? (target.reserve > 0
+    ? (PLAN_DAY_TYPE === 'steady'
+        ? `三餐維持完整營養，不為酒精大幅減量；2 杯威士忌氣泡水約額外 ${ALCOHOL_RESERVE_KCAL} kcal。酒精與女性乳癌風險呈劑量關係，若願意可優先改 1 杯或無酒精飲品。`
+        : target.reserve > 0
         ? `三餐已預留約 ${target.reserve} kcal，供 2 杯威士忌氣泡水（每杯暫按 45 ml 威士忌＋無糖氣泡水）；倒得更濃需另計。`
         : `當日目標已接近女性 1200 kcal 下限，三餐不再扣熱量；2 杯威士忌氣泡水約額外增加 ${ALCOHOL_RESERVE_KCAL} kcal，可改 1 杯或縮小酒量。`)
     : '';
   return {
     date: spec.date,
-    carbDay: spec.carbDay,
+    carbDay: PLAN_DAY_TYPE,
     drinkingPlanned: !!spec.drinking,
     alcoholReserveKcal: target.reserve,
     alcoholNote,
@@ -500,7 +511,7 @@ function buildWorkoutDay(spec) {
   const workout = WORKOUTS[spec.workout];
   return {
     date: spec.date,
-    carbDay: spec.carbDay,
+    carbDay: PLAN_DAY_TYPE,
     type: workout.type,
     focus: `每日開髖瘦腿主軸＋${workout.focus}`,
     duration: `${workout.duration}（含每日開髖 10–12 分鐘）`,
@@ -527,12 +538,25 @@ function mergeDays(plan, incoming) {
 }
 
 export function installPresetSchedule(db) {
-  if (!db.profile || !db.targets) return false;
+  if (!db.profile) return false;
   db.settings ||= {};
   const applied = Array.isArray(db.settings.appliedPresetSchedules) ? db.settings.appliedPresetSchedules : [];
+  const strategyApplied = applied.includes(STRATEGY_PRESET_ID);
+  let strategyChanged = false;
+  if (!strategyApplied) {
+    db.profile.intensity = 'steady';
+    db.profile.rate = 'slow';
+    db.profile.focusArea = 'shape';
+    db.targets = calcTargets(db.profile);
+    strategyChanged = true;
+  } else if (!db.targets?.cycle?.byType?.steady) {
+    db.targets = calcTargets(db.profile);
+    strategyChanged = true;
+  }
+  if (!db.targets) return false;
   const mealsApplied = applied.includes(MEAL_PRESET_ID);
-  const hipWorkoutsApplied = applied.includes(HIP_WORKOUT_PRESET_ID);
-  if (mealsApplied && hipWorkoutsApplied) return false;
+  const workoutsApplied = applied.includes(WORKOUT_PRESET_ID);
+  if (strategyApplied && mealsApplied && workoutsApplied && !strategyChanged) return false;
 
   const mealDays = DAYS.map((day) => buildMealDay(db, day));
   const workoutDays = DAYS.map(buildWorkoutDay);
@@ -549,16 +573,17 @@ export function installPresetSchedule(db) {
     const weekMeals = mealDays.filter((day) => mondayOf(day.date) === weekStart);
     const weekWorkouts = workoutDays.filter((day) => mondayOf(day.date) === weekStart);
     if (!mealsApplied) inserted += mergeDays(week.mealPlan, weekMeals);
-    if (!hipWorkoutsApplied) inserted += mergeDays(week.workoutPlan, weekWorkouts);
-    week.mealPlan.summary = `免 API 預排(下半身雕塑版)：依個人碳日目標分配三餐，五六日按 2 杯威士忌氣泡水安排；全段控鈉、補鉀(地瓜、馬鈴薯、香蕉、菠菜、酪梨)以減少下半身水腫。${restrictionNote}`;
-    week.workoutPlan.summary = '每日先做 10–12 分鐘開髖與臀腿啟動；每週 2 次高碳臀腿重訓(蹲系＋後鏈)、1 次中碳上肢核心維持平衡，飲酒日只做爬坡快走或溫和恢復。器材為 10 kg 壺鈴、5 kg 啞鈴與跑步機／橢圓機。';
-    week.workoutPlan.scheduleNote = '每日開髖可低強度進行，但高強度臀腿重訓仍需間隔恢復。脂肪無法指定部位消除：腿部線條靠「全身減脂＋臀腿訓練＋減少水腫」。飲酒前先吃正常正餐，酒後不訓練、不駕車；若宿醉、關節疼痛或明顯痠痛，就只散步或完全休息。';
+    if (!workoutsApplied) inserted += mergeDays(week.workoutPlan, weekWorkouts);
+    week.mealPlan.summary = `免 API 預排(瘦腿＋胸背維持版)：每日採約 15% 溫和熱量赤字，蛋白質穩定、不做激進碳循環；五六日 2 杯威士忌氣泡水列為額外熱量，不靠少吃正餐補償。${restrictionNote}`;
+    week.workoutPlan.summary = '每日 10–12 分鐘開髖與臀腿啟動；每週 2 次臀腿重訓、1 次完整胸背重訓，另在爬坡有氧日加入輕量推胸與姿勢練習。器材為 10 kg 壺鈴、5 kg 啞鈴與跑步機／橢圓機。';
+    week.workoutPlan.scheduleNote = '胸背訓練改善胸肌支撐與姿勢，但不能保證乳房脂肪在減脂時完全不變。每日開髖可低強度進行，高強度臀腿或胸背訓練仍需恢復；飲酒後不訓練、不駕車，若宿醉、關節疼痛或明顯痠痛就休息。';
   }
 
   db.settings.appliedPresetSchedules = [
     ...applied,
+    ...(strategyApplied ? [] : [STRATEGY_PRESET_ID]),
     ...(mealsApplied ? [] : [MEAL_PRESET_ID]),
-    ...(hipWorkoutsApplied ? [] : [HIP_WORKOUT_PRESET_ID]),
+    ...(workoutsApplied ? [] : [WORKOUT_PRESET_ID]),
   ];
-  return inserted > 0;
+  return strategyChanged || inserted > 0;
 }

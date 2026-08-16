@@ -8,6 +8,11 @@ import { DB } from './store.js';
 // 重點雕塑部位 → 訓練與飲食方針。
 // 前提(務必誠實):脂肪無法指定部位消除,靠的是「全身減脂 + 該部位阻力訓練 + 減少水腫」。
 export const FOCUS_RULES = {
+  shape: {
+    training: '以「瘦腿＋胸背維持」為主軸:每週 2 次臀腿重訓、1 次完整胸背重訓,另在有氧日加 1 次輕量推胸／姿勢練習,兩次胸部刺激至少間隔 48 小時。每天可做低強度開髖。胸肌與背肌訓練可改善支撐和姿勢,但不能保證乳房脂肪在減脂時完全不變。',
+    diet: '優先採每日均衡、約 15% 的溫和熱量赤字,蛋白質約 1.6–2.0 g/kg,不靠斷食、極低脂或激進低碳換取快速下降。目標是慢速減脂並保留肌肉;乳房脂肪仍可能隨全身脂肪下降。飲酒熱量另計,不要靠少吃正餐補償。',
+    lifestyle: '每週觀察體重、胸圍、腰圍與大腿圍的 4 週趨勢,不要用單日水腫判斷成敗。若胸部出現新腫塊、皮膚凹陷、乳頭異常分泌物或持續單側改變,應就醫評估。',
+  },
   lower: {
     training: '重訓以「臀腿」為主軸:深蹲、羅馬尼亞硬舉、臀推、分腿蹲/弓箭步、腿推、腿彎舉、髖外展、小腿。下半身訓練量明顯高於上半身,但上半身與核心每週仍各至少 1 次,維持體態平衡,不可完全不練。有氧優先選「會用到臀腿、又不易讓大腿變粗」的形式:坡度快走、爬階、腳踏車中低阻力、游泳;避免長時間高阻力衝刺型踩踏。',
     diet: '下半身視覺很受「水腫」左右:控制鈉(醬料、湯麵湯底、加工肉、醃漬物、零食),多吃高鉀食物(香蕉、地瓜、菠菜、酪梨、番茄、豆類),水分要喝足(怕水腫而少喝反而更腫),纖維足量避免便祕腹脹。',
@@ -42,6 +47,7 @@ export function focusBlock() {
 
 // 碳日 → 對應運動型別的方針(讓「當日飲食」決定「當日訓練」)。
 export const CARB_WORKOUT_RULE = {
+  steady: '均衡減脂日:飲食每天穩定,訓練不綁碳日;依週計畫安排臀腿、胸背、有氧與恢復,避免連續兩天高強度訓練同一肌群。',
   high: '重訓日(strength):練大肌群/多關節複合動作、可上大重量與較高訓練量,充分利用當天肝醣。',
   mid:  '中強度日(mixed / cardio):中等重量的小肌群或全身循環,或中強度有氧;訓練量適中。',
   low:  '低強度日(rest / cardio):完全休息,或只做低強度有氧(快走、飛輪 LISS)與伸展/活動度;肝醣低,不排大重量。',
@@ -211,8 +217,17 @@ export function personaPrompt(dateStr = null) {
   const fb = focusBlock();
   if (fb) lines.push('', fb);
 
-  // 碳循環方針
-  if (cycle?.byType) {
+  // 飲食策略
+  if (cycle?.patternKey === 'steady') {
+    const d = cycle.byType.steady;
+    lines.push(
+      '',
+      '【均衡減脂方針 — 本學員目前採用】',
+      `每日約 ${d.calorieTarget} kcal(蛋白質 ${d.macros.proteinG} / 碳水 ${d.macros.carbG} / 脂肪 ${d.macros.fatG} g),不做高低碳擺盪。`,
+      '以溫和熱量赤字、穩定蛋白質和規律阻力訓練慢速減脂;訓練依週計畫與恢復安排,不由碳日決定。',
+      '不可承諾減脂時胸部脂肪完全不變;胸背訓練改善的是胸肌支撐與姿勢。',
+    );
+  } else if (cycle?.byType) {
     lines.push(
       '',
       '【碳循環(carb cycling)方針 — 這是本學員的核心飲食法】',
@@ -239,7 +254,9 @@ export function personaPrompt(dateStr = null) {
     }
   }
 
-  lines.push('', '原則:增肌減脂的核心是「熱量控制 + 足量蛋白質 + 規律阻力訓練」;碳循環讓高碳日支援大重量訓練、低碳日加速減脂。建議要具體可執行,不說空話。');
+  lines.push('', cycle?.patternKey === 'steady'
+    ? '原則:採溫和熱量赤字、足量蛋白質與規律阻力訓練;不宣稱碳循環有額外減脂魔法。建議要具體可執行,不說空話。'
+    : '原則:增肌減脂的核心是「熱量控制 + 足量蛋白質 + 規律阻力訓練」;碳循環只用來配合訓練安排。建議要具體可執行,不說空話。');
   return lines.join('\n');
 }
 
@@ -284,8 +301,8 @@ export function aiWeekWorkout({ dates, note }) {
     '',
     '規劃原則:',
     '1. 每天都先安排相同的 10-12 分鐘低強度開髖與臀腿啟動:90/90 髖轉換、內收肌後坐、半跪髖屈肌伸展、雙腳臀橋、側躺抬腿;這 5 項必須出現在每天 items 的最前面。',
-    '2. 開髖每天可做,但主訓練依碳日與恢復調整:高碳日安排臀腿或全身重訓,中碳日搭配中等有氧,低碳日只做溫和活動、散步或恢復;不要連續兩天高強度訓練同一肌群。',
-    '3. 一週應包含 2-3 天重訓、1-3 天有氧、至少 1 天不做主訓練的恢復日。',
+    '2. 若採均衡減脂,主訓練不綁碳日;依恢復安排每週 2 次臀腿重訓、1 次完整胸背重訓,並在另一天加入輕量推胸／姿勢動作。若採碳循環才依高、中、低碳調整強度。不要連續兩天高強度訓練同一肌群。',
+    '3. 一週應包含 2-3 天重訓、1-3 天有氧、至少 1 天不做主訓練的恢復日;兩次胸部刺激至少間隔 48 小時。',
     '4. 每個動作都要有 howTo:一般人看得懂的動作要領(2-3 句,含常見錯誤提醒)。',
     '5. 每天給 timing:當天建議的運動時段,以及與用餐的搭配(如運動前 1 小時吃什麼、運動後 30 分鐘內補充什麼)。',
     '6. 開髖固定動作之外,重訓主項 3-5 個並標明組數次數;有氧標明強度與時間。不要宣稱局部減脂,以活動度、臀腿肌力與整體減脂改善腿部線條。',
@@ -320,7 +337,9 @@ export function aiDayMeals({ date, note, recentMeals, usedNames, dayTarget = nul
     ? `【今天是${dayTarget.label}】當日熱量目標約 ${dayTarget.calorieTarget} kcal,三餐加總要貼近:蛋白質 ${dayTarget.macros.proteinG} g、碳水 ${dayTarget.macros.carbG} g、脂肪 ${dayTarget.macros.fatG} g(±8%)。`
     : '原則:三餐加總貼近每日熱量目標(±5%)、蛋白質達標。';
   const carbGuide = dayTarget
-    ? (dayTarget.type === 'high'
+    ? (dayTarget.type === 'steady'
+        ? '均衡減脂日:三餐都要有蛋白質,搭配適量全穀澱粉、蔬果與好油脂;不要斷食、極低脂或為酒精大幅少吃。'
+        : dayTarget.type === 'high'
         ? '高碳日:碳水拉高(全穀飯麵、地瓜、水果),脂肪壓低;把主要碳水放在訓練前後那一餐。'
         : dayTarget.type === 'low'
           ? '低碳日:大幅減少澱粉與含糖食物,以蛋白質+大量蔬菜+優質脂肪為主(如雞胸、蛋、魚、酪梨、堅果、橄欖油)。'
@@ -359,7 +378,9 @@ export function aiDayMeals({ date, note, recentMeals, usedNames, dayTarget = nul
 // dayTarget 選填:依當日碳日型別設計對應訓練(高碳=重訓、中碳=中強度/有氧、低碳=休息/低強度)。
 export function aiDayWorkout({ date, note, weekSoFar, dayIndex, total, dayTarget = null }) {
   const carbLine = dayTarget
-    ? `【今天是${dayTarget.label}】必須依碳日安排對應訓練:${CARB_WORKOUT_RULE[dayTarget.type]} 這一天的 type 請設為「${CARB_DAY_TYPES[dayTarget.type].workout}」為主(低碳日可在 rest 與 cardio 間擇一,整週至少保留 1 天完全休息)。當天熱量約 ${dayTarget.calorieTarget} kcal、碳水 ${dayTarget.macros.carbG} g,請據此決定訓練量。`
+    ? (dayTarget.type === 'steady'
+        ? `【今天是${dayTarget.label}】${CARB_WORKOUT_RULE.steady} 當天熱量約 ${dayTarget.calorieTarget} kcal、碳水 ${dayTarget.macros.carbG} g。`
+        : `【今天是${dayTarget.label}】必須依碳日安排對應訓練:${CARB_WORKOUT_RULE[dayTarget.type]} 這一天的 type 請設為「${CARB_DAY_TYPES[dayTarget.type].workout}」為主(低碳日可在 rest 與 cardio 間擇一,整週至少保留 1 天完全休息)。當天熱量約 ${dayTarget.calorieTarget} kcal、碳水 ${dayTarget.macros.carbG} g,請據此決定訓練量。`)
     : (weekSoFar
         ? `本週前面幾天已安排:${weekSoFar}。請據此平衡整週:約 2-4 天重訓、1-3 天有氧、至少 1 天完全休息。`
         : '這是本週第一天,請開始安排,並讓整週約 2-4 天重訓、1-3 天有氧、至少 1 天完全休息。');
@@ -373,8 +394,8 @@ export function aiDayWorkout({ date, note, weekSoFar, dayIndex, total, dayTarget
       if (!rule) return '';
       return `這一天的動作選擇要明顯偏重「${(FOCUS_AREAS[key] || {}).label}」:${rule.training} 若當天是休息或低強度日,伸展與活動度也以該部位為主。`;
     })(),
-    '每天 items 最前面都必須安排相同的 10-12 分鐘低強度開髖與臀腿啟動:90/90 髖轉換、內收肌後坐、半跪髖屈肌伸展、雙腳臀橋、側躺抬腿。開髖每天可做,但主訓練才依碳日調整:高碳日做臀腿或全身重訓,中碳日搭配中等有氧,低碳日只做溫和活動、散步或恢復;不要連續兩天高強度訓練同一肌群。',
-    '每個動作要有 howTo(2-3 句動作要領含常見錯誤);給 timing(建議時段與用餐搭配,呼應當日碳量:高碳日把碳水放訓練前後);固定開髖之外,重訓主項 3-5 個並標組數次數,有氧標強度與時間;恢復日最多再加 1-2 個輕鬆活動。不要宣稱局部減脂,以活動度、臀腿肌力與整體減脂改善腿部線條。',
+    '每天 items 最前面都必須安排相同的 10-12 分鐘低強度開髖與臀腿啟動:90/90 髖轉換、內收肌後坐、半跪髖屈肌伸展、雙腳臀橋、側躺抬腿。均衡減脂時主訓練依週計畫與恢復安排;若採碳循環才依高、中、低碳調整。不要連續兩天高強度訓練同一肌群。',
+    '每個動作要有 howTo(2-3 句動作要領含常見錯誤);給 timing(建議時段與用餐搭配);固定開髖之外,重訓主項 3-5 個並標組數次數,有氧標強度與時間;恢復日最多再加 1-2 個輕鬆活動。不要宣稱局部減脂或保證胸部脂肪不變;以臀腿肌力改善腿部線條,以胸背訓練改善支撐與姿勢。',
     note ? `本週特別需求:${note}` : '',
     '',
     '只回傳 JSON,不要任何其他文字,格式如下:',
@@ -401,8 +422,8 @@ export function aiAnalyzeMeal({ description, imageB64, mealType, eatenToday, dat
     description ? `學員補充說明:「${description}」` : '',
     eatenToday ? `今天目前已吃:${eatenToday}` : '',
     '',
-    '請估算每項食物的熱量與三大營養素,並以營養師 + 健身教練的身分,依「今天的碳日型別與當日目標」給出具體建議(advice):',
-    '這餐與今天的碳日目標(尤其碳水)搭不搭?接下來這一天該怎麼調整?2-3 句,直接又實用。',
+    '請估算每項食物的熱量與三大營養素,並以營養師 + 健身教練的身分,依「今天的飲食策略與當日目標」給出具體建議(advice):',
+    '這餐與今天的熱量、蛋白質及碳水目標搭不搭?接下來這一天該怎麼調整?2-3 句,直接又實用。',
     '',
     '只回傳 JSON,不要任何其他文字,格式如下:',
     `{
@@ -445,7 +466,7 @@ export function aiChat({ date, context, history, message }) {
   ]
 }`,
     'mealUpdates 與 workoutUpdates 為選填,只在學員要求調整時出現。',
-    '調整餐點或運動時,務必維持該日碳日型別的定位(高碳日=高碳/重訓、中碳日=中碳/中強度、低碳日=低碳/休息或低強度有氧)。',
+    '若是均衡減脂日,請維持每日均衡目標與每週訓練安排;只有採碳循環時,才維持高／中／低碳日的定位。',
   ].join('\n');
   return ask({ system: personaPrompt(date), prompt, json: true, maxTokens: 4096, timeoutMs: 120000 });
 }
