@@ -5,9 +5,9 @@
 
 import { calcTargets } from './nutrition.js';
 
-const STRATEGY_PRESET_ID = 'steady-shape-strategy-2026-08-v1';
-const MEAL_PRESET_ID = 'steady-shape-meals-2026-08-15-v3';
-const WORKOUT_PRESET_ID = 'steady-shape-workouts-2026-08-15-v3';
+const STRATEGY_PRESET_ID = 'steady-shape-strategy-2026-08-v2';
+const MEAL_PRESET_ID = 'steady-shape-meals-2026-08-15-v4';
+const WORKOUT_PRESET_ID = 'steady-shape-workouts-2026-08-15-v4';
 const PLAN_DAY_TYPE = 'steady';
 const SAFE_FLOOR = { male: 1500, female: 1200 };
 // 兩杯 highball：每杯暫按 45 ml、40% 威士忌＋無糖氣泡水估算，約 200 kcal。
@@ -64,7 +64,7 @@ const CARBS = {
 const DAYS = [
   // ── 第一段:週末飲酒日(休息為主) ──
   {
-    date: '2026-08-15', carbDay: 'low', drinking: true,
+    date: '2026-08-15', carbDay: 'steady', drinking: true,
     meals: [
       ['酪梨莓果燕麥優格碗', 'yogurtBoost', 'oats', '酪梨薄片、莓果與肉桂粉', '均衡吃早餐，不為晚間飲酒省掉正餐。'],
       ['蒜香蝦仁地瓜沙拉', 'shrimp', 'sweetPotato', '菠菜、番茄與洋蔥', '沙拉醬自調(檸檬＋橄欖油),市售醬料鈉含量高。'],
@@ -73,7 +73,7 @@ const DAYS = [
     workout: 'restGluteWalk',
   },
   {
-    date: '2026-08-16', carbDay: 'low', drinking: true,
+    date: '2026-08-16', carbDay: 'steady', drinking: true,
     meals: [
       ['菠菜番茄烘蛋吐司', 'eggPlus', 'toast', '菠菜、小番茄與黑胡椒', '菠菜高鉀低鈉,搭配全麥吐司維持穩定飲食。'],
       ['檸香鮭魚地瓜彩蔬盤', 'salmon', 'sweetPotato', '蘆筍、彩椒與洋蔥', '鮭魚本身有油脂,烹調不必再加多油。'],
@@ -84,7 +84,7 @@ const DAYS = [
 
   // ── 第一週(8/17–8/23):下半身為主軸 ──
   {
-    date: '2026-08-17', carbDay: 'low',
+    date: '2026-08-17', carbDay: 'steady',
     meals: [
       ['無糖燕麥優格奇亞籽碗', 'yogurtBoost', 'oats', '奇亞籽、莓果與肉桂粉', '週一先補水、降鈉,但不需刻意低碳。'],
       ['檸檬雞胸地瓜酪梨沙拉', 'chicken', 'sweetPotato', '生菜、小黃瓜與酪梨', '酪梨補鉀;醬汁只用檸檬與黑胡椒。'],
@@ -93,7 +93,7 @@ const DAYS = [
     workout: 'recoveryGlute',
   },
   {
-    date: '2026-08-18', carbDay: 'high',
+    date: '2026-08-18', carbDay: 'steady',
     meals: [
       ['藍莓燕麥蛋白粥', 'yogurtBoost', 'oats', '藍莓與肉桂粉', '今天是下肢重訓日,早餐把碳水吃足。'],
       ['蔥爆牛肉糙米碗', 'leanBeef', 'brownRice', '青蔥、洋蔥與彩椒', '訓練前 2-3 小時吃,飯量照標示不要少吃。'],
@@ -102,7 +102,7 @@ const DAYS = [
     workout: 'lowerA',
   },
   {
-    date: '2026-08-19', carbDay: 'mid',
+    date: '2026-08-19', carbDay: 'steady',
     meals: [
       ['酪梨鮪魚全麥吐司', 'tuna', 'toast', '酪梨、番茄與黑胡椒', '不加美乃滋,改用無糖優格或酪梨提供油脂。'],
       ['香草鮭魚藜麥盤', 'salmon', 'quinoa', '青花菜與蘆筍', '香草與檸檬取代鹽,鈉降下來腿就不容易腫。'],
@@ -111,7 +111,7 @@ const DAYS = [
     workout: 'upperCore',
   },
   {
-    date: '2026-08-20', carbDay: 'high',
+    date: '2026-08-20', carbDay: 'steady',
     meals: [
       ['香蕉可可燕麥杯', 'yogurt', 'oats', '香蕉半根與無糖可可粉', '香蕉補鉀又補碳水,訓練日早餐很適合。'],
       ['黑胡椒豬里肌糙米碗', 'pork', 'brownRice', '青花菜與紅蘿蔔', '黑胡椒調味取代醬油;訓練前正常吃澱粉即可。'],
@@ -120,7 +120,7 @@ const DAYS = [
     workout: 'lowerB',
   },
   {
-    date: '2026-08-21', carbDay: 'mid', drinking: true,
+    date: '2026-08-21', carbDay: 'steady', drinking: true,
     meals: [
       ['菠菜蛋捲全麥吐司', 'eggPlus', 'toast', '菠菜、番茄與黑胡椒', '早餐蛋白質吃足,晚上比較不會亂吃。'],
       ['檸檬雞胸馬鈴薯沙拉', 'chicken', 'potato', '生菜、小黃瓜與甜椒', '馬鈴薯放涼再吃,抗性澱粉較多也較有飽足感。'],
@@ -129,7 +129,7 @@ const DAYS = [
     workout: 'inclineWalk',
   },
   {
-    date: '2026-08-22', carbDay: 'low', drinking: true,
+    date: '2026-08-22', carbDay: 'steady', drinking: true,
     meals: [
       ['希臘優格堅果燕麥碗', 'yogurtBoost', 'oats', '莓果、肉桂粉與少量堅果', '堅果選無調味,鹽味堅果會讓水腫更明顯。'],
       ['檸檬鮭魚地瓜蘆筍盤', 'salmon', 'sweetPotato', '蘆筍、菇類與洋蔥', '正常吃足正餐,不要為晚上喝酒挨餓。'],
@@ -138,7 +138,7 @@ const DAYS = [
     workout: 'restGluteWalk',
   },
   {
-    date: '2026-08-23', carbDay: 'low', drinking: true,
+    date: '2026-08-23', carbDay: 'steady', drinking: true,
     meals: [
       ['番茄鮪魚全麥吐司', 'tuna', 'toast', '生菜、番茄與小黃瓜', '鮪魚罐頭選水煮並瀝乾,可再沖一下水降鈉。'],
       ['蒜香豬里肌地瓜時蔬', 'pork', 'sweetPotato', '高麗菜與青花菜', '清蒸或乾煎,不搭配濃醬與勾芡。'],
@@ -149,7 +149,7 @@ const DAYS = [
 
   // ── 第二週(8/24–8/30):下半身進階,組數與單腳動作加重 ──
   {
-    date: '2026-08-24', carbDay: 'low',
+    date: '2026-08-24', carbDay: 'steady',
     meals: [
       ['無糖燕麥優格酪梨碗', 'yogurtBoost', 'oats', '酪梨、莓果與奇亞籽', '週一維持低鈉、高鉀並喝足水。'],
       ['蝦仁藜麥酪梨沙拉', 'shrimp', 'quinoa', '生菜、番茄與酪梨', '蝦仁低脂高蛋白,搭配適量全穀澱粉。'],
@@ -158,7 +158,7 @@ const DAYS = [
     workout: 'recoveryGlute',
   },
   {
-    date: '2026-08-25', carbDay: 'high',
+    date: '2026-08-25', carbDay: 'steady',
     meals: [
       ['莓果燕麥蛋白杯', 'yogurtBoost', 'oats', '莓果與肉桂粉', '今天下肢重訓進階週,早餐碳水要吃滿。'],
       ['黑胡椒牛肉糙米碗', 'leanBeef', 'brownRice', '彩椒、洋蔥與青花菜', '黑胡椒取代醬油調味,鈉會低很多。'],
@@ -167,7 +167,7 @@ const DAYS = [
     workout: 'lowerA2',
   },
   {
-    date: '2026-08-26', carbDay: 'mid',
+    date: '2026-08-26', carbDay: 'steady',
     meals: [
       ['蛋沙拉全麥吐司', 'eggPlus', 'toast', '生菜、番茄與黑胡椒', '蛋沙拉用無糖優格拌,不加美乃滋。'],
       ['蒜香蝦仁藜麥沙拉', 'shrimp', 'quinoa', '菠菜、彩椒與小黃瓜', '藜麥可換等量糙米飯。'],
@@ -176,7 +176,7 @@ const DAYS = [
     workout: 'upperCore',
   },
   {
-    date: '2026-08-27', carbDay: 'high',
+    date: '2026-08-27', carbDay: 'steady',
     meals: [
       ['香蕉燕麥蛋白粥', 'yogurtBoost', 'oats', '香蕉半根與肉桂粉', '香蕉補鉀,對容易腿腫的人特別有幫助。'],
       ['照燒雞胸糙米便當', 'chicken', 'brownRice', '高麗菜與紅蘿蔔', '照燒醬減半,避免糖與鈉一起超標;訓練日飯要吃足。'],
@@ -185,7 +185,7 @@ const DAYS = [
     workout: 'lowerB2',
   },
   {
-    date: '2026-08-28', carbDay: 'mid', drinking: true,
+    date: '2026-08-28', carbDay: 'steady', drinking: true,
     meals: [
       ['酪梨蛋全麥吐司', 'eggPlus', 'toast', '酪梨、番茄與黑胡椒', '酪梨提供好油脂與鉀,早餐吃很適合。'],
       ['香草雞胸藜麥碗', 'chicken', 'quinoa', '兩碗綜合蔬菜', '醬汁另放只用一半,避開凱薩醬。'],
@@ -194,7 +194,7 @@ const DAYS = [
     workout: 'inclineWalk',
   },
   {
-    date: '2026-08-29', carbDay: 'low', drinking: true,
+    date: '2026-08-29', carbDay: 'steady', drinking: true,
     meals: [
       ['莓果燕麥優格蛋白碗', 'yogurtBoost', 'oats', '肉桂粉與奇亞籽', '奇亞籽補纖維,避免便祕造成腹脹。'],
       ['檸香鮭魚地瓜彩蔬盤', 'salmon', 'sweetPotato', '蘆筍、彩椒與洋蔥', '用檸檬與香草調味,鹽只放一點點。'],
@@ -203,7 +203,7 @@ const DAYS = [
     workout: 'restGluteWalk',
   },
   {
-    date: '2026-08-30', carbDay: 'low', drinking: true,
+    date: '2026-08-30', carbDay: 'steady', drinking: true,
     meals: [
       ['番茄蝦仁全麥吐司', 'shrimp', 'toast', '生菜、番茄與小黃瓜', '起床先喝一大杯水再吃早餐。'],
       ['蒜香豬里肌糙米蔬菜盤', 'pork', 'brownRice', '高麗菜與青花菜', '氣炸或乾煎,避免裹粉與濃醬。'],
