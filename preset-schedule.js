@@ -3,7 +3,8 @@
 // 訓練以臀腿為主軸(每週 2 次下肢重訓)，並在飲食與生活面加入消水腫策略。
 // 註：脂肪無法指定部位消除，下半身緊實靠「全身減脂＋臀腿訓練＋減少水腫」三者並行。
 
-const PRESET_ID = 'lower-body-2026-08-15-v1';
+const MEAL_PRESET_ID = 'lower-body-2026-08-15-v1';
+const HIP_WORKOUT_PRESET_ID = 'hip-opening-2026-08-15-v2';
 const SAFE_FLOOR = { male: 1500, female: 1200 };
 // 兩杯 highball：每杯暫按 45 ml、40% 威士忌＋無糖氣泡水估算，約 200 kcal。
 const ALCOHOL_RESERVE_KCAL = 200;
@@ -207,6 +208,15 @@ const DAYS = [
   },
 ];
 
+// 每天固定做同一套低強度髖部活動與臀腿啟動；主訓練強度才隨碳日調整。
+const DAILY_HIP_ROUTINE = [
+  ['每日開髖｜90/90 髖轉換', '2 組 x 每側 8 下', '坐直後讓雙膝左右緩慢倒向地面，維持腳掌位置並用髖部帶動；不要為了碰地而扭腰或彈震。', '髖關節活動度'],
+  ['每日開髖｜內收肌後坐', '2 組 x 每側 8 下', '四足跪姿將一腿向側邊伸直，臀部緩慢向後坐再回來；背部保持自然，只做到大腿內側有輕微拉感。', '大腿內側、髖部'],
+  ['每日開髖｜半跪髖屈肌伸展', '每側 30 秒 x 2', '半跪後先微收骨盆，再把重心輕移向前；不要拱腰或把前膝推得太遠。', '髖前側'],
+  ['每日臀腿啟動｜雙腳臀橋', '2 組 x 12 下', '腳跟踩穩、吐氣收腹後抬髖，頂端夾臀一秒；不要用下背過度拱起。', '臀肌、腿後側'],
+  ['每日臀腿啟動｜側躺抬腿', '2 組 x 每側 12 下', '身體保持一直線，腳尖微朝前並由臀部帶動抬腿；不要翻轉骨盆或甩腿。', '臀中肌、髖外側'],
+];
+
 const WORKOUTS = {
   // ── 下半身重點:蹲系主導(第一週) ──
   lowerA: {
@@ -353,13 +363,13 @@ const WORKOUTS = {
     ],
   },
   upperStrength: {
-    type: 'strength', focus: '上肢與核心重訓', duration: '約 45 分鐘',
+    type: 'strength', focus: '臀腿線條＋上肢維持重訓', duration: '約 45 分鐘',
     timing: '建議傍晚訓練；把高碳日澱粉集中在訓練前後兩餐。',
     items: [
-      ['啞鈴地板臥推（5 kg x 2）', '4 組 x 8–12 下', '仰躺、手肘約向下 45 度，推起時手腕保持直；不要聳肩或撞擊啞鈴。', '胸、肩、三頭肌'],
-      ['單手壺鈴划船（10 kg）', '4 組 x 每側 10 下', '背部保持平直，把手肘拉向髖部；不要用身體扭轉甩動。', '背肌、二頭肌'],
+      ['相撲高腳杯深蹲（10 kg 壺鈴）', '4 組 x 10 下', '站距略寬、腳尖微向外，膝蓋沿腳尖方向彎曲並把髖部向下坐；不要讓膝蓋內夾。', '臀肌、大腿內側、股四頭肌'],
+      ['啞鈴地板臥推（5 kg x 2）', '3 組 x 8–12 下', '仰躺、手肘約向下 45 度，推起時手腕保持直；不要聳肩或撞擊啞鈴。', '胸、肩、三頭肌'],
+      ['單手壺鈴划船（10 kg）', '3 組 x 每側 10 下', '背部保持平直，把手肘拉向髖部；不要用身體扭轉甩動。', '背肌、二頭肌'],
       ['啞鈴肩上推舉（5 kg x 2）', '3 組 x 8–10 下', '肋骨收好再向上推；若無法控制就改單手輪流，不要過度拱腰。', '肩、三頭肌'],
-      ['啞鈴二頭彎舉（5 kg x 2）', '3 組 x 10–12 下', '手肘固定在身體兩側並緩慢下降；不要擺動身體借力。', '二頭肌'],
       ['前臂棒式', '3 組 x 25–40 秒', '夾臀收腹並保持頭到腳跟一直線；腰下沉時立即休息。', '核心'],
     ],
   },
@@ -492,10 +502,10 @@ function buildWorkoutDay(spec) {
     date: spec.date,
     carbDay: spec.carbDay,
     type: workout.type,
-    focus: workout.focus,
-    duration: workout.duration,
-    timing: workout.timing,
-    items: workout.items.map(([name, detail, howTo, muscles]) => ({ name, detail, howTo, muscles })),
+    focus: `每日開髖瘦腿主軸＋${workout.focus}`,
+    duration: `${workout.duration}（含每日開髖 10–12 分鐘）`,
+    timing: `先完成每日開髖與臀腿啟動，再依當日強度進行主訓練。${workout.timing}`,
+    items: [...DAILY_HIP_ROUTINE, ...workout.items].map(([name, detail, howTo, muscles]) => ({ name, detail, howTo, muscles })),
   };
 }
 
@@ -505,7 +515,7 @@ function mondayOf(dateStr) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// 本預排涵蓋的日期一律以新版覆蓋(這些日期都在未來,且舊版沒有下半身安排);
+// 本預排涵蓋的日期一律以新版覆蓋；
 // 不在清單內的日期(例如已過去的 8/12–8/14)完全不動。
 function mergeDays(plan, incoming) {
   if (!incoming.length) return 0;
@@ -520,7 +530,9 @@ export function installPresetSchedule(db) {
   if (!db.profile || !db.targets) return false;
   db.settings ||= {};
   const applied = Array.isArray(db.settings.appliedPresetSchedules) ? db.settings.appliedPresetSchedules : [];
-  if (applied.includes(PRESET_ID)) return false;
+  const mealsApplied = applied.includes(MEAL_PRESET_ID);
+  const hipWorkoutsApplied = applied.includes(HIP_WORKOUT_PRESET_ID);
+  if (mealsApplied && hipWorkoutsApplied) return false;
 
   const mealDays = DAYS.map((day) => buildMealDay(db, day));
   const workoutDays = DAYS.map(buildWorkoutDay);
@@ -536,13 +548,17 @@ export function installPresetSchedule(db) {
     week.workoutPlan ||= { summary: '', scheduleNote: '', days: [] };
     const weekMeals = mealDays.filter((day) => mondayOf(day.date) === weekStart);
     const weekWorkouts = workoutDays.filter((day) => mondayOf(day.date) === weekStart);
-    inserted += mergeDays(week.mealPlan, weekMeals);
-    inserted += mergeDays(week.workoutPlan, weekWorkouts);
+    if (!mealsApplied) inserted += mergeDays(week.mealPlan, weekMeals);
+    if (!hipWorkoutsApplied) inserted += mergeDays(week.workoutPlan, weekWorkouts);
     week.mealPlan.summary = `免 API 預排(下半身雕塑版)：依個人碳日目標分配三餐，五六日按 2 杯威士忌氣泡水安排；全段控鈉、補鉀(地瓜、馬鈴薯、香蕉、菠菜、酪梨)以減少下半身水腫。${restrictionNote}`;
-    week.workoutPlan.summary = '下半身雕塑週期：每週 2 次臀腿重訓(蹲系＋後鏈)、1 次上肢核心維持平衡、爬坡快走當有氧，重訓放在非飲酒日。器材為 10 kg 壺鈴、5 kg 啞鈴與跑步機／橢圓機。';
-    week.workoutPlan.scheduleNote = '脂肪無法指定部位消除：下半身緊實靠「全身減脂＋臀腿訓練＋減少水腫」。飲酒前先完成正常正餐；酒後不訓練、不駕車，隔天若宿醉改完全休息；久坐每小時起身走動，晚上靠牆抬腿 10 分鐘；任何動作引起疼痛時立即停止。';
+    week.workoutPlan.summary = '每日先做 10–12 分鐘開髖與臀腿啟動；每週 2 次高碳臀腿重訓(蹲系＋後鏈)、1 次中碳上肢核心維持平衡，飲酒日只做爬坡快走或溫和恢復。器材為 10 kg 壺鈴、5 kg 啞鈴與跑步機／橢圓機。';
+    week.workoutPlan.scheduleNote = '每日開髖可低強度進行，但高強度臀腿重訓仍需間隔恢復。脂肪無法指定部位消除：腿部線條靠「全身減脂＋臀腿訓練＋減少水腫」。飲酒前先吃正常正餐，酒後不訓練、不駕車；若宿醉、關節疼痛或明顯痠痛，就只散步或完全休息。';
   }
 
-  db.settings.appliedPresetSchedules = [...applied, PRESET_ID];
+  db.settings.appliedPresetSchedules = [
+    ...applied,
+    ...(mealsApplied ? [] : [MEAL_PRESET_ID]),
+    ...(hipWorkoutsApplied ? [] : [HIP_WORKOUT_PRESET_ID]),
+  ];
   return inserted > 0;
 }

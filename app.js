@@ -1096,7 +1096,7 @@ $$('#tabbar button').forEach((b) => (b.onclick = () => switchTab(b.dataset.tab))
   updateBanner();
   $('#key-banner').onclick = () => switchTab('me');
   render();
-  if (presetInstalled) toast('已載入 8/12～8/23 免 API 菜單與運動排程');
+  if (presetInstalled) toast('已載入 8/15～8/30 免 API 菜單與運動排程');
   prunePhotos();
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
